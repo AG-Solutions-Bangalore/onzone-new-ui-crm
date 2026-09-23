@@ -93,20 +93,26 @@ export function AppSidebar({ ...props }) {
         url: "/sticker-printing",
         icon: Printer,
       },
+      // {
+      //   title: "Factory Outward",
+      //   url: "/order-received",
+      //   icon: FileText,
+      //   isActive: false,
+      //   items: [
+      //     {
+      //       title: "Goods Received",
+      //       url: "/factory-outlet/received",
+      //     },
+      //   ],
+      // },
       {
-        title: "Factory Outward",
-        url: "/order-received",
-        icon: FileText,
+        title: "Goods Received",
+        url: "/factory-outlet/received",
+        icon: PackageCheck,
         isActive: false,
-        items: [
-          {
-            title: "Goods Received",
-            url: "/factory-outlet/received",
-          },
-        ],
       },
       {
-        title: "Sales",
+        title: "Sales Packing",
         url: "/sales",
         icon: ShoppingBag,
         isActive: false,

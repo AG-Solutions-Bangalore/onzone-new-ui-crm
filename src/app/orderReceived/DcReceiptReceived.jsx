@@ -12,11 +12,23 @@ import {
   Minus,
   Loader2,
   CheckCircle,
+  CheckCircle2,
+  CheckCheck,
   XCircle,
   ChevronDown,
   ChevronUp,
   Barcode,
   AlertTriangle,
+  Building2,
+  Tag,
+  Calendar,
+  Hash,
+  Package,
+  Boxes,
+  FileText,
+  Layers,
+  User,
+  RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -54,6 +66,10 @@ const DcReceiptReceived = () => {
   const [receiveConfirmOpen, setReceiveConfirmOpen] = useState(false);
   const [selectedBoxToReceive, setSelectedBoxToReceive] = useState(null);
   const [receiveSelectedConfirmOpen, setReceiveSelectedConfirmOpen] = useState(false);
+  const [notReceiveConfirmOpen, setNotReceiveConfirmOpen] = useState(false);
+  const [selectedBoxToNotReceive, setSelectedBoxToNotReceive] = useState(null);
+  const [notReceiveSelectedConfirmOpen, setNotReceiveSelectedConfirmOpen] = useState(false);
+  const [closeOrderConfirmOpen, setCloseOrderConfirmOpen] = useState(false);
   const [barcodeFilter, setBarcodeFilter] = useState("all");
   const location = useLocation();
 
@@ -225,7 +241,7 @@ const DcReceiptReceived = () => {
     const wsData = [];
 
     // TITLE
-    wsData.push(["DC RECEIPT"]);
+    wsData.push(["PACKING RECEIPT"]);
     wsData.push([]);
 
     // SUMMARY
@@ -323,7 +339,7 @@ const DcReceiptReceived = () => {
 
     // Create workbook and save
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "DC Receipt");
+    XLSX.utils.book_append_sheet(wb, ws, "Packing Receipt");
 
     const fileName = `Packing${workOrder.work_order_rc_id}.xlsx`;
     XLSX.writeFile(wb, fileName);
@@ -406,7 +422,8 @@ const DcReceiptReceived = () => {
   const updateBoxStatusMutation = useMutation({
     mutationFn: async (boxNumber) => {
       const token = localStorage.getItem("token");
-      const workOrderRcRef = workOrder?.work_order_rc_ref || id;
+      const workOrderRcRef =
+        workOrder?.work_order_rc_ref || workOrder?.work_order_rc_id || id;
       const payload = {
         box: boxNumber,
         work_order_rc_ref: workOrderRcRef,
@@ -419,6 +436,7 @@ const DcReceiptReceived = () => {
           headers: { Authorization: `Bearer ${token}` },
         },
       );
+
       return response.data;
     },
     onSuccess: (data) => {
@@ -426,7 +444,7 @@ const DcReceiptReceived = () => {
       setSelectedBoxToReceive(null);
       toast({
         title: "Success",
-        description: data?.message || data?.msg || "Box status updated successfully",
+        description: data?.message || data?.msg || "Box marked as received successfully",
       });
       refetch();
     },
@@ -470,7 +488,8 @@ const DcReceiptReceived = () => {
   const updateSelectedBoxesStatusMutation = useMutation({
     mutationFn: async (boxesToUpdate) => {
       const token = localStorage.getItem("token");
-      const workOrderRcRef = workOrder?.work_order_rc_ref || id;
+      const workOrderRcRef =
+        workOrder?.work_order_rc_ref || workOrder?.work_order_rc_id || id;
 
       const promises = boxesToUpdate.map((boxNumber) => {
         const payload = {
@@ -490,6 +509,7 @@ const DcReceiptReceived = () => {
     },
     onSuccess: () => {
       setReceiveSelectedConfirmOpen(false);
+      setCheckedBoxes(new Set());
       toast({
         title: "Success",
         description: "Selected box(es) marked as received successfully",
@@ -536,6 +556,171 @@ const DcReceiptReceived = () => {
   const confirmReceiveSelectedBoxes = () => {
     if (selectedBoxesToReceiveList.length > 0) {
       updateSelectedBoxesStatusMutation.mutate(selectedBoxesToReceiveList);
+    }
+  };
+
+  const isAllBoxesReceived = useMemo(() => {
+    return (
+      sortedBoxes.length > 0 &&
+      sortedBoxes.every((box) => isBoxReceivedCheck(box))
+    );
+  }, [sortedBoxes, workOrderSub]);
+
+  const closeAllOrderReceivedMutation = useMutation({
+    mutationFn: async () => {
+      const token = localStorage.getItem("token");
+      const response = await axios.put(
+        `${BASE_URL}/api/update-work-orders-all-received-status/${id}`,
+        {},
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      return response.data;
+    },
+    onSuccess: (data) => {
+      setCloseOrderConfirmOpen(false);
+      toast({
+        title: "Success",
+        description:
+          data?.message ||
+          data?.msg ||
+          "Order closed and marked as received successfully",
+      });
+      navigate("/factory-outlet/received");
+    },
+    onError: (error) => {
+      setCloseOrderConfirmOpen(false);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description:
+          error.response?.data?.message || "Error closing order received",
+      });
+    },
+  });
+
+  const updateBoxNotReceivedStatusMutation = useMutation({
+    mutationFn: async (boxNumber) => {
+      const token = localStorage.getItem("token");
+      const workOrderRcRef = workOrder?.work_order_rc_ref || id;
+      const payload = {
+        box: boxNumber,
+        work_order_rc_ref: workOrderRcRef,
+      };
+
+      const response = await axios.put(
+        `${BASE_URL}/api/update-work-orders-notreceived-status-box`,
+        payload,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      return response.data;
+    },
+    onSuccess: (data) => {
+      setNotReceiveConfirmOpen(false);
+      setSelectedBoxToNotReceive(null);
+      toast({
+        title: "Success",
+        description: data?.message || data?.msg || "Box received status undone successfully",
+      });
+      refetch();
+    },
+    onError: (error) => {
+      setNotReceiveConfirmOpen(false);
+      setSelectedBoxToNotReceive(null);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.response?.data?.message || "Error undoing box received status",
+      });
+    },
+  });
+
+  const handleNotReceiveBoxClick = (boxNumber) => {
+    setSelectedBoxToNotReceive(boxNumber);
+    setNotReceiveConfirmOpen(true);
+  };
+
+  const confirmNotReceiveBox = () => {
+    if (selectedBoxToNotReceive) {
+      updateBoxNotReceivedStatusMutation.mutate(selectedBoxToNotReceive);
+    }
+  };
+
+  const updateSelectedBoxesNotReceivedStatusMutation = useMutation({
+    mutationFn: async (boxesToUpdate) => {
+      const token = localStorage.getItem("token");
+      const workOrderRcRef = workOrder?.work_order_rc_ref || id;
+
+      const promises = boxesToUpdate.map((boxNumber) => {
+        const payload = {
+          box: boxNumber,
+          work_order_rc_ref: workOrderRcRef,
+        };
+        return axios.put(
+          `${BASE_URL}/api/update-work-orders-notreceived-status-box`,
+          payload,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+        );
+      });
+
+      return await Promise.all(promises);
+    },
+    onSuccess: () => {
+      setNotReceiveSelectedConfirmOpen(false);
+      setCheckedBoxes(new Set());
+      toast({
+        title: "Success",
+        description: "Selected box(es) marked as not received (undone) successfully",
+      });
+      refetch();
+    },
+    onError: (error) => {
+      setNotReceiveSelectedConfirmOpen(false);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description:
+          error.response?.data?.message || "Error undoing selected boxes status",
+      });
+    },
+  });
+
+  const selectedBoxesToNotReceiveList = useMemo(() => {
+    return Array.from(checkedBoxes)
+      .filter((box) => isBoxReceivedCheck(box))
+      .sort((a, b) => Number(a) - Number(b));
+  }, [checkedBoxes, workOrderSub]);
+
+  const handleNotReceiveSelectedClick = () => {
+    if (checkedBoxes.size === 0) {
+      toast({
+        title: "Info",
+        description: "Please select at least one box to undo received status.",
+        variant: "default",
+      });
+      return;
+    }
+    if (selectedBoxesToNotReceiveList.length === 0) {
+      toast({
+        title: "Info",
+        description: "None of the selected boxes are marked as received.",
+        variant: "default",
+      });
+      return;
+    }
+    setNotReceiveSelectedConfirmOpen(true);
+  };
+
+  const confirmNotReceiveSelectedBoxes = () => {
+    if (selectedBoxesToNotReceiveList.length > 0) {
+      updateSelectedBoxesNotReceivedStatusMutation.mutate(
+        selectedBoxesToNotReceiveList,
+      );
     }
   };
 
@@ -676,14 +861,14 @@ const DcReceiptReceived = () => {
   return (
     <Page>
       <div className="max-w-full mx-auto">
-        <Card className="shadow-lg">
-          {/* Sticky Header and DC Summary Details Section */}
-          <div className="sticky top-16 z-20 bg-white border-b shadow-sm rounded-t-xl print:static print:border-none print:shadow-none">
-            <CardHeader className="border-b py-3 px-4">
+        <Card className="shadow-lg border border-stone-200/80 rounded-2xl overflow-hidden bg-white">
+          {/* Header and Packing Summary Details Section */}
+          <div className="bg-white border-b border-stone-200/80 print:border-none">
+            <CardHeader className="border-b py-3 px-4 bg-[#FDFBF7]">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-4 flex-wrap">
                   <CardTitle className="text-lg font-semibold">
-                    Dc Receipt
+                    Packing Receipt
                   </CardTitle>
                   <div className="flex items-center gap-3 text-sm text-gray-700">
                     <span className="flex items-center gap-1">
@@ -718,15 +903,47 @@ const DcReceiptReceived = () => {
                     </label>
                   )}
 
-                  {!isOrderReceived && checkedBoxes.size > 0 && (
+                  {selectedBoxesToReceiveList.length > 0 && (
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={handleReceiveSelectedClick}
                       disabled={updateSelectedBoxesStatusMutation.isPending}
+                      className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300 font-semibold"
                     >
-                      <div className="flex items-center gap-2 cursor-pointer">
-                        Received ({checkedBoxes.size})
+                      <div className="flex items-center gap-1.5 cursor-pointer">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                        Received ({selectedBoxesToReceiveList.length})
+                      </div>
+                    </Button>
+                  )}
+
+                  {selectedBoxesToNotReceiveList.length > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleNotReceiveSelectedClick}
+                      disabled={updateSelectedBoxesNotReceivedStatusMutation.isPending}
+                      className="bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300 font-semibold"
+                    >
+                      <div className="flex items-center gap-1.5 cursor-pointer">
+                        <RotateCcw className="h-3.5 w-3.5 text-amber-700" />
+                        Undo Received ({selectedBoxesToNotReceiveList.length})
+                      </div>
+                    </Button>
+                  )}
+
+                  {/* Close the Order Button - visible ONLY when all boxes are marked as received and order is not yet closed */}
+                  {!isOrderReceived && isAllBoxesReceived && (
+                    <Button
+                      size="sm"
+                      onClick={() => setCloseOrderConfirmOpen(true)}
+                      disabled={closeAllOrderReceivedMutation.isPending}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-xs"
+                    >
+                      <div className="flex items-center gap-1.5 cursor-pointer">
+                        <CheckCheck className="h-4 w-4" />
+                        Close the Order
                       </div>
                     </Button>
                   )}
@@ -759,7 +976,7 @@ const DcReceiptReceived = () => {
               </div>
             </CardHeader>
 
-            {/* Header Table - hidden when printing since each box will print its own header */}
+            {/* Header Table */}
             <div className="p-4 bg-white print-hidden-custom">
               <table className="w-full border-collapse text-sm">
                 <tbody>
@@ -788,13 +1005,13 @@ const DcReceiptReceived = () => {
                       : {workOrder.work_order_rc_brand}
                     </td>
                     <td className="font-semibold p-1 w-[6rem] text-right border-r">
-                      DC No
+                      Packing No
                     </td>
                     <td className="p-1 w-[8rem]">
                       : {workOrder.work_order_rc_dc_no}
                     </td>
                     <td className="font-semibold p-1 w-[6rem] text-right border-r">
-                      DC Date
+                      Packing Date
                     </td>
                     <td className="p-1 w-[8rem]">
                       :{" "}
@@ -842,8 +1059,8 @@ const DcReceiptReceived = () => {
             </div>
           </div>
 
-          <CardContent className="p-4">
-            <div ref={componentRef} className="bg-white rounded-lg print:p-4">
+          <CardContent className="p-3 sm:p-4 bg-stone-50/40">
+            <div ref={componentRef} className="rounded-xl print:p-4 print:bg-white">
               <style>{`
                 @media print {
                   .print-hidden-custom {
@@ -870,7 +1087,7 @@ const DcReceiptReceived = () => {
               `}</style>
 
               {/* Table grouped by box – all boxes visible on screen, only checked printed */}
-              <div className="space-y-6">
+              <div className="space-y-2.5">
                 {sortedBoxes.map((box) => {
                   const isChecked = checkedBoxes.has(box);
                   const isExpanded = expandedBoxes.has(box);
@@ -884,24 +1101,19 @@ const DcReceiptReceived = () => {
                       sum + (parseFloat(row.amount) || 0) * (row.quantity || 1),
                     0,
                   );
-                  const checkedBoxesArray = sortedBoxes.filter((b) =>
-                    checkedBoxes.has(b),
-                  );
-                  const isLastChecked =
-                    checkedBoxesArray[checkedBoxesArray.length - 1] === box;
 
                   const isBoxReceived = isBoxReceivedCheck(box);
 
                   return (
                     <React.Fragment key={`box-frag-${box}`}>
+                      {/* Box Container: Screen card style vs Print format */}
                       <div
-                        className={`border border-black p-3 ${
-                          isChecked
-                            ? "print-box-container"
-                            : "print-hidden-custom"
-                        }`}
+                        className={`rounded-xl border transition-all duration-200 overflow-hidden ${isChecked
+                            ? "print-box-container border-[#A27B5C] bg-[#FDFBF7]/50 shadow-xs ring-1 ring-[#A27B5C]/20"
+                            : "print-hidden-custom border-stone-200/90 bg-white hover:border-stone-300 shadow-2xs"
+                          }`}
                       >
-                        {/* Header Table for print only - shows before every box */}
+                        {/* Header Table for print only - shows before every box in print */}
                         <table className="w-full mb-4 border-collapse text-sm print-visible-table-custom">
                           <tbody>
                             <tr className="border-t border-l border-r border-black">
@@ -929,13 +1141,13 @@ const DcReceiptReceived = () => {
                                 : {workOrder.work_order_rc_brand}
                               </td>
                               <td className="font-semibold p-1 w-[6rem] text-right border-r">
-                                DC No
+                                Packing No
                               </td>
                               <td className="p-1 w-[8rem]">
                                 : {workOrder.work_order_rc_dc_no}
                               </td>
                               <td className="font-semibold p-1 w-[6rem] text-right border-r">
-                                DC Date
+                                Packing Date
                               </td>
                               <td className="p-1 w-[8rem]">
                                 :{" "}
@@ -981,107 +1193,147 @@ const DcReceiptReceived = () => {
                           </tbody>
                         </table>
 
-                        <div className="flex justify-between items-center mb-2">
-                          <div className="flex items-center gap-2">
+                        {/* Box Header Bar (Screen View) */}
+                        <div className="py-2 px-3 sm:px-4 bg-white border-b border-stone-100 flex items-center justify-between flex-wrap gap-2.5">
+                          <div className="flex items-center gap-2.5 flex-wrap">
                             {/* Checkbox – hidden when printing */}
-                            <div className="print-hidden-custom">
+                            <div className="print-hidden-custom flex items-center">
                               <input
                                 type="checkbox"
                                 checked={isChecked}
                                 onChange={() => toggleBox(box)}
-                                className="w-4 h-4 cursor-pointer"
+                                className="w-4 h-4 cursor-pointer accent-[#543D2B] rounded"
                               />
                             </div>
-                            <h3 className="text-lg font-semibold">
-                              Box (Total Pcs: {boxData.totalPcs})
-                            </h3>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            {/* Check / Manage Barcodes Button */}
-                            <div className="print-hidden-custom">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => openBarcodeDialog(box, boxData)}
-                                className="h-8 text-xs font-medium cursor-pointer flex items-center gap-1.5 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 transition-colors"
-                              >
-                                <Barcode className="h-3.5 w-3.5" />
-                                Check / Manage Barcodes
-                              </Button>
-                            </div>
 
-                            {/* Show / Hide Button */}
-                            <div className="print-hidden-custom">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => toggleBoxExpand(box)}
-                                className="h-8 text-xs font-medium cursor-pointer"
-                              >
-                                {isExpanded ? (
-                                  <div className="flex items-center gap-1.5">
-                                    <ChevronUp className="h-3.5 w-3.5" />
-                                    Hide
-                                  </div>
-                                ) : (
-                                  <div className="flex items-center gap-1.5">
-                                    <ChevronDown className="h-3.5 w-3.5" />
-                                    Show
-                                  </div>
-                                )}
-                              </Button>
-                            </div>
+                            <span className="bg-[#E5D7C3] text-[#543D2B] font-bold text-xs px-2.5 py-0.5 rounded-md border border-[#D8C7B0]/80 shadow-2xs flex items-center gap-1">
+                              <Package className="h-3 w-3" />
+                              Box #{box}
+                            </span>
 
-                            <div className="print-hidden-custom">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-stone-100 text-stone-800 text-xs font-semibold border border-stone-200">
+                              Total Pcs: <strong className="text-stone-900 font-bold">{boxData.totalPcs}</strong>
+                            </span>
+
+                            <div className="print-hidden-custom flex items-center gap-1.5">
                               {isBoxReceived && (
-                                <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-md bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300">
-                                  <CheckCircle className="h-3.5 w-3.5" />
-                                  Received
-                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                    <CheckCircle2 className="h-3 w-3" />
+                                    Received
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleNotReceiveBoxClick(box)}
+                                    disabled={updateBoxNotReceivedStatusMutation.isPending}
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-md bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 transition-colors cursor-pointer"
+                                    title="Undo received status for this box"
+                                  >
+                                    <RotateCcw className="h-3 w-3 text-amber-700" />
+                                    Undo
+                                  </button>
+                                </div>
                               )}
                             </div>
-                            <span className="font-semibold text-sm">{box}</span>
+                          </div>
+
+                          <div className="flex items-center gap-2 print-hidden-custom flex-wrap">
+                            {/* Check / Manage Barcodes Button */}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openBarcodeDialog(box, boxData)}
+                              className="h-7 text-xs font-semibold bg-white hover:bg-stone-50 border-stone-200 text-stone-700 rounded-lg px-2.5 flex items-center gap-1.5 shadow-2xs cursor-pointer transition-colors"
+                            >
+                              <Barcode className="h-3.5 w-3.5 text-[#543D2B]" />
+                              Check / Manage Barcodes
+                            </Button>
+
+                            {/* Show / Hide Details Button */}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => toggleBoxExpand(box)}
+                              className="h-7 text-xs font-semibold bg-white hover:bg-stone-50 border-stone-200 text-stone-700 rounded-lg px-2.5 flex items-center gap-1.5 shadow-2xs cursor-pointer transition-colors"
+                            >
+                              {isExpanded ? (
+                                <>
+                                  <ChevronUp className="h-3.5 w-3.5 text-stone-500" />
+                                  Hide Details
+                                </>
+                              ) : (
+                                <>
+                                  <ChevronDown className="h-3.5 w-3.5 text-stone-500" />
+                                  Show Details
+                                </>
+                              )}
+                            </Button>
                           </div>
                         </div>
 
                         {/* Table is shown when expanded on screen, and always rendered when printing */}
-                        <div className={isExpanded ? "block" : "hidden print:block"}>
-                          <table className="w-full border-collapse border border-black text-sm">
-                            <thead>
-                              <tr className="bg-[#E5D7C3] text-[#543D2B]">
-                                <th className="border border-black p-1 text-left font-bold uppercase text-xs">
-                                  Barcode
-                                </th>
-                                <th className="border border-black p-1 text-left font-bold uppercase text-xs">
-                                  Size
-                                </th>
-                                <th className="border border-black p-1 text-left font-bold uppercase text-xs">
-                                  Amount (₹)
-                                </th>
-                                <th className="border border-black p-1 text-right font-bold uppercase text-xs">
-                                  Quantity
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {rows.map((row, idx) => (
-                                <tr key={idx}>
-                                  <td className="border border-black p-1">
-                                    {row.barcode}
-                                  </td>
-                                  <td className="border border-black p-1">
-                                    {row.size}
-                                  </td>
-                                  <td className="border border-black p-1">
-                                    {row.amount}
-                                  </td>
-                                  <td className="border border-black p-1 text-right">
-                                    {row.quantity}
-                                  </td>
+                        <div className={`${isExpanded ? "block" : "hidden print:block"} p-2.5 sm:p-3 bg-white/70 border-t border-stone-100`}>
+                          <div className="overflow-hidden rounded-lg border border-stone-200/80 print:rounded-none print:border-black">
+                            <table className="w-full border-collapse text-sm">
+                              <thead>
+                                <tr className="bg-[#E5D7C3] text-[#543D2B] print:bg-[#E5D7C3]">
+                                  <th className="border-b border-stone-200 print:border p-2 print:p-1 text-left font-bold text-xs uppercase tracking-wider">
+                                    Barcode
+                                  </th>
+                                  <th className="border-b border-stone-200 print:border p-2 print:p-1 text-center font-bold text-xs uppercase tracking-wider">
+                                    Size
+                                  </th>
+                                  <th className="border-b border-stone-200 print:border p-2 print:p-1 text-center font-bold text-xs uppercase tracking-wider">
+                                    Amount (₹)
+                                  </th>
+                                  <th className="border-b border-stone-200 print:border p-2 print:p-1 text-right font-bold text-xs uppercase tracking-wider">
+                                    Quantity
+                                  </th>
                                 </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                              </thead>
+                              <tbody className="bg-white divide-y divide-stone-100">
+                                {rows.length > 0 ? (
+                                  rows.map((row, idx) => (
+                                    <tr key={idx} className="hover:bg-stone-50/70 transition-colors">
+                                      <td className="border-stone-200 print:border p-2 print:p-1 font-mono font-semibold text-stone-800 text-xs">
+                                        {row.barcode}
+                                      </td>
+                                      <td className="border-stone-200 print:border p-2 print:p-1 text-center text-stone-700 text-xs">
+                                        {row.size}
+                                      </td>
+                                      <td className="border-stone-200 print:border p-2 print:p-1 text-center font-mono text-stone-800 text-xs">
+                                        {row.amount}
+                                      </td>
+                                      <td className="border-stone-200 print:border p-2 print:p-1 text-right font-bold text-stone-900 text-xs">
+                                        {row.quantity}
+                                      </td>
+                                    </tr>
+                                  ))
+                                ) : (
+                                  <tr>
+                                    <td colSpan={4} className="p-3 text-center text-stone-500 text-xs">
+                                      No item barcodes registered for this box yet.
+                                    </td>
+                                  </tr>
+                                )}
+                              </tbody>
+                              {rows.length > 0 && (
+                                <tfoot>
+                                  <tr className="bg-stone-50/80 font-bold text-xs text-stone-900 border-t border-stone-200">
+                                    <td colSpan={2} className="p-2 print:p-1 text-stone-600 font-semibold">
+                                      Subtotal for Box #{box}
+                                    </td>
+                                    <td className="p-2 print:p-1 text-center font-mono font-bold text-[#543D2B]">
+                                      ₹{totalAmount.toLocaleString()}
+                                    </td>
+                                    <td className="p-2 print:p-1 text-right font-bold text-[#543D2B]">
+                                      {boxData.totalPcs} Pcs
+                                    </td>
+                                  </tr>
+                                </tfoot>
+                              )}
+                            </table>
+                          </div>
                         </div>
                       </div>
                     </React.Fragment>
@@ -1109,8 +1361,8 @@ const DcReceiptReceived = () => {
       <ConfirmDialog
         open={deleteConfirmOpen}
         onOpenChange={setDeleteConfirmOpen}
-        title="Close DC Receipt Order?"
-        description="Are you sure you want to close this DC Receipt and mark all materials as received?"
+        title="Close Packing Receipt Order?"
+        description="Are you sure you want to close this Packing Receipt and mark all materials as received?"
         variant="warning"
         confirmText="Yes, Close Order"
         cancelText="No"
@@ -1140,6 +1392,42 @@ const DcReceiptReceived = () => {
         cancelText="Cancel"
         onConfirm={confirmReceiveSelectedBoxes}
         isLoading={updateSelectedBoxesStatusMutation.isPending}
+      />
+
+      <ConfirmDialog
+        open={notReceiveConfirmOpen}
+        onOpenChange={setNotReceiveConfirmOpen}
+        title={`Undo Received Status for Box ${selectedBoxToNotReceive}?`}
+        description={`Are you sure you want to undo received status and mark Box ${selectedBoxToNotReceive} as not received?`}
+        variant="warning"
+        confirmText="Yes, Undo Received"
+        cancelText="Cancel"
+        onConfirm={confirmNotReceiveBox}
+        isLoading={updateBoxNotReceivedStatusMutation.isPending}
+      />
+
+      <ConfirmDialog
+        open={notReceiveSelectedConfirmOpen}
+        onOpenChange={setNotReceiveSelectedConfirmOpen}
+        title={`Undo Received Status for ${selectedBoxesToNotReceiveList.length} Selected Box(es)?`}
+        description={`Are you sure you want to undo received status and mark Box ${selectedBoxesToNotReceiveList.join(", ")} as not received?`}
+        variant="warning"
+        confirmText="Yes, Undo Received"
+        cancelText="Cancel"
+        onConfirm={confirmNotReceiveSelectedBoxes}
+        isLoading={updateSelectedBoxesNotReceivedStatusMutation.isPending}
+      />
+
+      <ConfirmDialog
+        open={closeOrderConfirmOpen}
+        onOpenChange={setCloseOrderConfirmOpen}
+        title="Close Order Confirmation"
+        description="Do you really want to close the order?"
+        variant="success"
+        confirmText="Yes"
+        cancelText="No"
+        onConfirm={() => closeAllOrderReceivedMutation.mutate()}
+        isLoading={closeAllOrderReceivedMutation.isPending}
       />
     </Page>
   );

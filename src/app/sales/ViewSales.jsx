@@ -116,7 +116,7 @@ const ViewSales = () => {
     }, []);
 
     const { data, isLoading, isError, refetch } = useQuery({
-      queryKey: ["dcreceipt", id],
+      queryKey: ["salesPackingListView", id],
       queryFn: async () => {
         const token = localStorage.getItem("token");
         const response = await axios.get(
@@ -125,13 +125,99 @@ const ViewSales = () => {
             headers: { Authorization: `Bearer ${token}` },
           }
         );
+
+        const workOrder = response.data.workordersales || {};
+
+        let rawSub = [];
+        if (Array.isArray(response.data)) {
+          rawSub = response.data;
+        } else if (response.data && typeof response.data === "object") {
+          const allArrays = Object.values(response.data).filter(Array.isArray);
+
+          // Find the array whose items contain work_order_sub_brand or finished_stock_amount
+          const richArray = allArrays.find((arr) =>
+            arr.some(
+              (item) =>
+                item &&
+                (item.work_order_sub_brand ||
+                  item.finished_stock_amount !== undefined)
+            )
+          );
+
+          if (richArray && richArray.length > 0) {
+            rawSub = richArray;
+          } else {
+            rawSub =
+              response.data.workordersalessubNew ||
+              response.data.workordersalessub_new ||
+              response.data.workordersalessub ||
+              response.data.workordersales_sub ||
+              response.data.workorder_sub_sa_data ||
+              response.data.data ||
+              allArrays.find((arr) => arr.length > 0) ||
+              [];
+          }
+        }
+
+        const enrichedSub = rawSub.map((item) => {
+          const brand =
+            item.work_order_sub_brand ||
+            item.brand ||
+            item.brand_name ||
+            item.work_order_sa_brand ||
+            workOrder.work_order_sa_brand ||
+            workOrder.brand_name ||
+            "N/A";
+
+          const mrp =
+            item.finished_stock_amount !== undefined &&
+            item.finished_stock_amount !== null &&
+            item.finished_stock_amount !== ""
+              ? item.finished_stock_amount
+              : item.amount ||
+                item.mrp ||
+                item.rate ||
+                item.price ||
+                workOrder.finished_stock_amount ||
+                workOrder.amount ||
+                "-";
+
+          const count = Number(
+            item.count !== undefined && item.count !== null
+              ? item.count
+              : item.total_count || item.pcs || item.quantity || 1
+          );
+
+          return {
+            ...item,
+            work_order_sub_brand: brand,
+            finished_stock_amount: mrp,
+            brand,
+            mrp,
+            count,
+          };
+        });
+
+        // Group by brand + mrp
+        const aggregatedMap = new Map();
+        enrichedSub.forEach((item) => {
+          const key = `${item.brand}___${item.mrp}`;
+          if (aggregatedMap.has(key)) {
+            const existing = aggregatedMap.get(key);
+            existing.count += item.count;
+          } else {
+            aggregatedMap.set(key, { ...item });
+          }
+        });
+
+        const finalSub = Array.from(aggregatedMap.values());
+
         return {
-          workOrder: response.data.workordersales || {},
-          workOrderSub: response.data.workordersalessub || [],
+          workOrder,
+          workOrderSub: finalSub.length > 0 ? finalSub : enrichedSub,
           workOrderFooter: response.data.workordersalesfooter || {},
-          workOrderDataMin: response.data.closest_min_combo || '',
-          workOrderDataMax: response.data.closest_max_combo || '',
-          
+          workOrderDataMin: response.data.closest_min_combo || "",
+          workOrderDataMax: response.data.closest_max_combo || "",
         };
       },
     });
@@ -159,16 +245,8 @@ const ViewSales = () => {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center justify-between w-full gap-4">
                       <CardTitle className="text-lg font-bold text-stone-900 tracking-tight">
-                        Work Order Sales View
+                        Sales Packing List View
                       </CardTitle>
-                      <div className="flex items-center gap-3 text-xs">
-                        <span className="bg-[#E5D7C3]/70 text-[#543D2B] px-3 py-1 rounded-xl font-bold border border-[#D8C7B0]">
-                          <strong className="text-stone-800">Min:</strong> {data?.workOrderDataMin || 'N/A'}
-                        </span>
-                        <span className="bg-[#E5D7C3]/70 text-[#543D2B] px-3 py-1 rounded-xl font-bold border border-[#D8C7B0]">
-                          <strong className="text-stone-800">Max:</strong> {data?.workOrderDataMax || 'N/A'}
-                        </span>
-                      </div>
                     </div>
                     
                     <ReactToPrint
@@ -192,10 +270,10 @@ const ViewSales = () => {
                   >
                     {/* Copy 1 - Shown on Screen (Full Width) and in Print (Left Column) */}
                     <div className="copy-wrapper w-full print:w-[48.5%] flex flex-col">
-                      {/* Packing List Centered Heading */}
+                      {/* Sales Packing List Centered Heading */}
                       <div className="copy-heading text-center mb-5 print:mb-2">
                         <span className="inline-block bg-[#E5D7C3] text-[#543D2B] px-8 py-2 print:py-1 rounded-xl font-extrabold text-lg print:text-base tracking-widest uppercase shadow-2xs border border-[#D8C7B0]">
-                          Packing List
+                          Sales Packing List
                         </span>
                       </div>
 
@@ -237,22 +315,58 @@ const ViewSales = () => {
                               <thead className="bg-[#E5D7C3] text-[#543D2B] print:bg-[#E5D7C3]">
                                 <tr>
                                   <th className="border-b border-stone-200 print:border p-2.5 print:p-1 text-center font-bold text-xs uppercase tracking-wider">Brand</th>
-                                  <th className="border-b border-stone-200 print:border p-2.5 print:p-1 text-center font-bold text-xs uppercase tracking-wider">No of Pieces</th>
                                   <th className="border-b border-stone-200 print:border p-2.5 print:p-1 text-center font-bold text-xs uppercase tracking-wider">Mrp (₹)</th>
+                                  <th className="border-b border-stone-200 print:border p-2.5 print:p-1 text-center font-bold text-xs uppercase tracking-wider">No of Pieces</th>
                                 </tr>
                               </thead>
                               <tbody className="bg-white divide-y divide-stone-100">
-                                {workOrderSub.map((item, index) => (
-                                  <tr key={index} className="text-center hover:bg-stone-50/70 transition-colors">
+                                {workOrderSub && workOrderSub.length > 0 ? (
+                                  workOrderSub.map((item, index) => (
+                                    <tr key={index} className="text-center hover:bg-stone-50/70 transition-colors">
+                                      <td className="border-stone-200 print:border p-2.5 print:p-1 text-stone-800 font-medium text-sm">
+                                        {item.work_order_sub_brand ||
+                                          item.brand ||
+                                          item.brand_name ||
+                                          item.work_order_sa_brand ||
+                                          workOrder.work_order_sa_brand ||
+                                          workOrder.brand_name ||
+                                          "N/A"}
+                                      </td>
+                                      <td className="border-stone-200 print:border p-2.5 print:p-1 text-stone-800 font-mono font-semibold text-sm">
+                                        {item.finished_stock_amount !== undefined && item.finished_stock_amount !== null && item.finished_stock_amount !== ""
+                                          ? item.finished_stock_amount
+                                          : item.mrp ||
+                                            item.amount ||
+                                            "-"}
+                                      </td>
+                                      <td className="border-stone-200 print:border p-2.5 print:p-1 font-bold text-stone-900 text-sm">
+                                        {item.count !== undefined && item.count !== null
+                                          ? item.count
+                                          : item.pcs || 1}
+                                      </td>
+                                    </tr>
+                                  ))
+                                ) : (
+                                  <tr className="text-center hover:bg-stone-50/70 transition-colors">
                                     <td className="border-stone-200 print:border p-2.5 print:p-1 text-stone-800 font-medium text-sm">
-                                      {item.work_order_sub_brand || "N/A"}
+                                      {workOrder.work_order_sa_brand ||
+                                        workOrder.work_order_sa_fabric_sale ||
+                                        workOrder.brand_name ||
+                                        "N/A"}
                                     </td>
-                                    <td className="border-stone-200 print:border p-2.5 print:p-1 font-bold text-stone-900 text-sm">{item.count}</td>
                                     <td className="border-stone-200 print:border p-2.5 print:p-1 text-stone-800 font-mono font-semibold text-sm">
-                                      {item.finished_stock_amount}
+                                      {workOrder.finished_stock_amount ||
+                                        workOrder.amount ||
+                                        workOrder.mrp ||
+                                        "-"}
+                                    </td>
+                                    <td className="border-stone-200 print:border p-2.5 print:p-1 font-bold text-stone-900 text-sm">
+                                      {workOrderFooter.total_received ||
+                                        workOrder.work_order_sa_pcs ||
+                                        0}
                                     </td>
                                   </tr>
-                                ))}
+                                )}
                               </tbody>
                             </table>
                           </div>
@@ -282,10 +396,10 @@ const ViewSales = () => {
 
                     {/* Copy 2 - Hidden on Screen, Shown only in Print (Right Column) */}
                     <div className="copy-wrapper hidden print:flex print:w-[48.5%] flex-col">
-                      {/* Packing List Centered Heading Outside the Box */}
+                      {/* Sales Packing List Centered Heading Outside the Box */}
                       <div className="copy-heading text-center mb-2">
                         <span className="inline-block bg-[#E5D7C3] text-[#543D2B] px-6 py-1 rounded font-bold text-base tracking-wide uppercase">
-                          Packing List
+                          Sales Packing List
                         </span>
                       </div>
 
@@ -326,22 +440,58 @@ const ViewSales = () => {
                             <thead className="bg-[#E5D7C3] text-[#543D2B]">
                               <tr>
                                 <th className="border p-2 text-center font-bold">Brand</th>
-                                <th className="border p-2 text-center font-bold">No of Pieces</th>
                                 <th className="border p-2 text-center font-bold">Mrp (₹)</th>
+                                <th className="border p-2 text-center font-bold">No of Pieces</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {workOrderSub.map((item, index) => (
-                                <tr key={index} className="text-center">
+                              {workOrderSub && workOrderSub.length > 0 ? (
+                                workOrderSub.map((item, index) => (
+                                  <tr key={index} className="text-center">
+                                    <td className="border p-2">
+                                      {item.work_order_sub_brand ||
+                                        item.brand ||
+                                        item.brand_name ||
+                                        item.work_order_sa_brand ||
+                                        workOrder.work_order_sa_brand ||
+                                        workOrder.brand_name ||
+                                        "N/A"}
+                                    </td>
+                                    <td className="border p-2">
+                                      {item.finished_stock_amount !== undefined && item.finished_stock_amount !== null && item.finished_stock_amount !== ""
+                                        ? item.finished_stock_amount
+                                        : item.mrp ||
+                                          item.amount ||
+                                          "-"}
+                                    </td>
+                                    <td className="border p-2">
+                                      {item.count !== undefined && item.count !== null
+                                        ? item.count
+                                        : item.pcs || 1}
+                                    </td>
+                                  </tr>
+                                ))
+                              ) : (
+                                <tr className="text-center">
                                   <td className="border p-2">
-                                    {item.work_order_sub_brand || "N/A"}
+                                    {workOrder.work_order_sa_brand ||
+                                      workOrder.work_order_sa_fabric_sale ||
+                                      workOrder.brand_name ||
+                                      "N/A"}
                                   </td>
-                                  <td className="border p-2">{item.count}</td>
                                   <td className="border p-2">
-                                    {item.finished_stock_amount}
+                                    {workOrder.finished_stock_amount ||
+                                      workOrder.amount ||
+                                      workOrder.mrp ||
+                                      "-"}
+                                  </td>
+                                  <td className="border p-2">
+                                    {workOrderFooter.total_received ||
+                                      workOrder.work_order_sa_pcs ||
+                                      0}
                                   </td>
                                 </tr>
-                              ))}
+                              )}
                             </tbody>
                           </table>
                         </div>
