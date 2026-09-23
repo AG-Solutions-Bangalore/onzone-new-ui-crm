@@ -337,7 +337,7 @@ const SalesReport = () => {
                         Retailer
                       </TableHead>
                       <TableHead className="text-center font-bold text-[#543D2B] text-xs uppercase tracking-wider py-3">
-                        DC No
+                        Packing Slip No
                       </TableHead>
                       <TableHead className="text-center font-bold text-[#543D2B] text-xs uppercase tracking-wider py-3">
                         SA Status

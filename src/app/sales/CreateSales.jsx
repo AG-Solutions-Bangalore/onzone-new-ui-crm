@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { z } from "zod";
@@ -6,6 +6,7 @@ import {
   Trash2,
   ChevronLeft,
   Plus,
+  Minus,
   Loader2,
   Calendar,
   Building2,
@@ -33,17 +34,106 @@ import { LoaderComponent } from "@/components/LoaderComponent/LoaderComponent";
 
 // Zod schema for validation
 const orderSchema = z.object({
-  work_order_sa_year: z.string(),
+  work_order_sa_year: z.union([z.string(), z.number()]).optional(),
   work_order_sa_date: z.string().min(1, "Date is required"),
-  work_order_sa_retailer_id: z.string().min(1, "Retailer is required"),
-  work_order_sa_dc_no: z.string().min(1, "DC No is required"),
-  work_order_sa_dc_date: z.string().min(1, "DC Date is required"),
-  work_order_sa_box: z.string().optional(),
-  work_order_sa_pcs: z.string().min(1, "Pieces count is required"),
-  work_order_sa_fabric_sale: z.string().min(1, "Fabric sale is required"),
-  work_order_sa_count: z.number().min(1, "Count is required"),
+  work_order_sa_retailer_id: z.union([
+    z.string().min(1, "Retailer is required"),
+    z.number().min(1, "Retailer is required"),
+  ]),
+  work_order_sa_dc_no: z.string().min(1, "Packing Slip No is required"),
+  work_order_sa_dc_date: z.string().optional(),
+  work_order_sa_box: z.union([z.string(), z.number()]).optional(),
+  work_order_sa_pcs: z.union([
+    z.string().min(1, "Pieces count is required"),
+    z.number().min(1, "Pieces count is required"),
+  ]),
+  work_order_sa_fabric_sale: z.string().optional(),
+  work_order_sa_count: z.union([z.string(), z.number()]).optional(),
   work_order_sa_remarks: z.string().optional(),
 });
+
+// Helper function to calculate closest min and max box combinations based on pieces
+const calculateBoxCombos = (totalPcs) => {
+  const n = parseInt(totalPcs, 10);
+  if (!n || n <= 0) return { minCombo: null, maxCombo: null };
+
+  const standardSizes = [32, 30, 28, 24, 20, 18, 16, 14, 12];
+
+  // Find exact combinations of standard box sizes that sum to n
+  const findExactCombos = (target) => {
+    const results = [];
+    const search = (remaining, startIndex, current) => {
+      if (remaining === 0) {
+        results.push([...current]);
+        return;
+      }
+      if (remaining < 0) return;
+
+      for (let i = startIndex; i < standardSizes.length; i++) {
+        const size = standardSizes[i];
+        if (remaining >= size) {
+          current.push(size);
+          search(remaining - size, i, current);
+          current.pop();
+        }
+      }
+    };
+    search(target, 0, []);
+    return results;
+  };
+
+  const formatCombo = (boxList) => {
+    if (!boxList || boxList.length === 0) return null;
+    const counts = {};
+    boxList.forEach((size) => {
+      counts[size] = (counts[size] || 0) + 1;
+    });
+    return Object.entries(counts)
+      .sort((a, b) => Number(b[0]) - Number(a[0]))
+      .map(([size, count]) => `${size}x${count}`)
+      .join(" + ");
+  };
+
+  const exactCombos = findExactCombos(n);
+
+  if (exactCombos.length > 0) {
+    const sortedCombos = [...exactCombos].sort((a, b) => a.length - b.length);
+    const maxComboBoxes = sortedCombos[0];
+    const minComboBoxes = sortedCombos[sortedCombos.length - 1];
+
+    const maxComboStr = formatCombo(maxComboBoxes);
+    const minComboStr =
+      minComboBoxes.length !== maxComboBoxes.length
+        ? formatCombo(minComboBoxes)
+        : null;
+
+    return {
+      minCombo: minComboStr,
+      maxCombo: maxComboStr,
+    };
+  }
+
+  if (n % 16 === 0) {
+    return {
+      minCombo: null,
+      maxCombo: `16x${n / 16}`,
+    };
+  }
+
+  const base16Count = Math.floor(n / 16);
+  const remainder = n % 16;
+  if (base16Count > 0 && remainder > 0) {
+    return {
+      minCombo: null,
+      maxCombo: `16x${base16Count} + ${remainder}x1`,
+    };
+  }
+
+  return {
+    minCombo: null,
+    maxCombo: `${n}x1`,
+  };
+};
 
 const customSelectStyles = {
   control: (provided, state) => ({
@@ -125,8 +215,23 @@ const CreateSales = () => {
 
   const [barcodes, setBarcodes] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [duplicateBarcodes, setDuplicateBarcodes] = useState({});
   const [currentInputValue, setCurrentInputValue] = useState("");
+
+  const boxCombos = useMemo(() => {
+    return calculateBoxCombos(workorder.work_order_sa_pcs);
+  }, [workorder.work_order_sa_pcs]);
+
+  const uniqueBarcodes = useMemo(() => {
+    const map = new Map();
+    barcodes.forEach((b) => {
+      map.set(b, (map.get(b) || 0) + 1);
+    });
+    return Array.from(map.entries()).map(([barcode, count], idx) => ({
+      index: idx + 1,
+      barcode,
+      count,
+    }));
+  }, [barcodes]);
 
   const { data: retailerData, isFetching } = useFetchRetailer();
 
@@ -149,13 +254,13 @@ const CreateSales = () => {
         },
         body: JSON.stringify(submissionData),
       });
-      if (!response.ok) throw new Error("Failed to create sales order");
+      if (!response.ok) throw new Error("Failed to create packing list");
       return response.json();
     },
     onSuccess: () => {
       toast({
         title: "Success",
-        description: "Sales order created successfully",
+        description: "Sales packing list created successfully",
         variant: "default",
       });
       navigate("/sales");
@@ -163,7 +268,7 @@ const CreateSales = () => {
     onError: (error) => {
       toast({
         title: "Error",
-        description: error.response?.data?.message || "Failed to create sales order",
+        description: error.response?.data?.message || "Failed to create packing list",
         variant: "destructive",
       });
     },
@@ -184,25 +289,6 @@ const CreateSales = () => {
       }
     }
   };
-
-  const calculateDuplicates = (barcodesList) => {
-    const duplicates = {};
-    const seen = {};
-
-    barcodesList.forEach((barcode) => {
-      if (seen[barcode]) {
-        duplicates[barcode] = (duplicates[barcode] || 1) + 1;
-      } else {
-        seen[barcode] = true;
-      }
-    });
-
-    return duplicates;
-  };
-
-  useEffect(() => {
-    setDuplicateBarcodes(calculateDuplicates(barcodes));
-  }, [barcodes]);
 
   const handleBarcodeInputChange = (e) => {
     setCurrentInputValue(e.target.value);
@@ -294,13 +380,39 @@ const CreateSales = () => {
     }
   };
 
-  const removeBarcode = useCallback(
-    (index) => {
-      const newBarcodes = [...barcodes];
-      newBarcodes.splice(index, 1);
-      setBarcodes(newBarcodes);
+  const removeOneBarcode = useCallback(
+    (barcodeToRemove) => {
+      const idx = barcodes.lastIndexOf(barcodeToRemove);
+      if (idx !== -1) {
+        const newBarcodes = [...barcodes];
+        newBarcodes.splice(idx, 1);
+        setBarcodes(newBarcodes);
+      }
     },
     [barcodes]
+  );
+
+  const addOneBarcode = useCallback(
+    (barcodeToAdd) => {
+      const maxPcs = parseInt(workorder.work_order_sa_pcs || 0, 10);
+      if (barcodes.length >= maxPcs) {
+        toast({
+          title: "Limit reached",
+          description: `You have reached the maximum of ${maxPcs} T-codes specified in Total Pieces.`,
+          variant: "destructive",
+        });
+        return;
+      }
+      setBarcodes((prev) => [...prev, barcodeToAdd]);
+    },
+    [barcodes.length, workorder.work_order_sa_pcs, toast]
+  );
+
+  const removeAllOfBarcode = useCallback(
+    (barcodeToRemove) => {
+      setBarcodes((prev) => prev.filter((b) => b !== barcodeToRemove));
+    },
+    []
   );
 
   const onSubmit = async (e) => {
@@ -378,13 +490,13 @@ const CreateSales = () => {
           <div>
             <span className="text-[10px] uppercase tracking-wider font-semibold text-[#A27B5C] flex items-center gap-1.5">
               <ShoppingBag className="h-3.5 w-3.5" />
-              Sales & Distribution
+              Sales Packing
             </span>
             <h1 className="font-heading text-lg font-bold text-stone-800 tracking-tight leading-tight mt-0.5">
-              Create Work Order Sales
+              Create Packing List
             </h1>
             <p className="text-xs text-stone-500 font-medium">
-              Record new delivery outward sales and link verified garment T-Codes.
+              Record new delivery outward sales packing and link verified garment T-Codes.
             </p>
           </div>
 
@@ -396,25 +508,14 @@ const CreateSales = () => {
           >
             <Link to="/sales" className="flex items-center gap-1.5">
               <ChevronLeft className="h-4 w-4" />
-              Back to Sales
+              Back
             </Link>
           </Button>
         </div>
 
-        {/* Section 1: Sales & Dispatch Information */}
-        <div className="bg-white border border-stone-200/80 rounded-2xl p-5 sm:p-6 shadow-2xs space-y-4">
-          <div className="flex items-center gap-2 border-b border-stone-100 pb-3">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#F5F2EB] text-[#A27B5C]">
-              <FileText className="h-4 w-4" />
-            </div>
-            <div>
-              <h2 className="text-xs font-bold text-stone-800 uppercase tracking-wider">
-                1. Order & Dispatch Details
-              </h2>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {/* Sales & Dispatch Information Form */}
+        <div className="bg-white border border-stone-200/80 rounded-2xl p-5 sm:p-6 shadow-2xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Retailer */}
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold text-stone-700 flex items-center gap-1">
@@ -481,17 +582,27 @@ const CreateSales = () => {
                 onChange={onInputChange}
                 className="h-10 text-xs bg-white border-stone-200 focus:border-[#A27B5C] focus:ring-[#A27B5C]/20 rounded-xl text-stone-800 shadow-2xs font-medium"
               />
+              {workorder.work_order_sa_pcs && parseInt(workorder.work_order_sa_pcs, 10) > 0 && (
+                <div className="flex items-center gap-1.5 text-[10px] pt-0.5">
+                  <span className="bg-[#E5D7C3]/70 text-[#543D2B] px-2 py-0.5 rounded-md font-bold border border-[#D8C7B0]">
+                    <strong className="text-stone-800">Min:</strong> {boxCombos.minCombo || "N/A"}
+                  </span>
+                  <span className="bg-[#E5D7C3]/70 text-[#543D2B] px-2 py-0.5 rounded-md font-bold border border-[#D8C7B0]">
+                    <strong className="text-stone-800">Max:</strong> {boxCombos.maxCombo || "N/A"}
+                  </span>
+                </div>
+              )}
             </div>
 
-            {/* DC No */}
+            {/* Packing Slip No */}
             <div className="space-y-1.5">
-              <Label htmlFor="dcNo" className="text-xs font-semibold text-stone-700 flex items-center gap-1">
+              <Label htmlFor="packingSlipNo" className="text-xs font-semibold text-stone-700 flex items-center gap-1">
                 <Hash className="h-3.5 w-3.5 text-stone-400" />
-                DC No <span className="text-red-500">*</span>
+                Packing Slip No <span className="text-red-500">*</span>
               </Label>
               <Input
-                id="dcNo"
-                placeholder="Enter Delivery Challan No"
+                id="packingSlipNo"
+                placeholder="Enter Packing Slip No"
                 name="work_order_sa_dc_no"
                 value={workorder.work_order_sa_dc_no}
                 onChange={onInputChange}
@@ -499,8 +610,8 @@ const CreateSales = () => {
               />
             </div>
 
-            {/* DC Date */}
-            <div className="space-y-1.5">
+            {/* DC Date - Commented */}
+            {/* <div className="space-y-1.5">
               <Label htmlFor="dcDate" className="text-xs font-semibold text-stone-700 flex items-center gap-1">
                 <Calendar className="h-3.5 w-3.5 text-stone-400" />
                 DC Date <span className="text-red-500">*</span>
@@ -513,10 +624,10 @@ const CreateSales = () => {
                 onChange={onInputChange}
                 className="h-10 text-xs bg-white border-stone-200 focus:border-[#A27B5C] focus:ring-[#A27B5C]/20 rounded-xl text-stone-800 shadow-2xs font-medium"
               />
-            </div>
+            </div> */}
 
-            {/* Fabric Sales */}
-            <div className="space-y-1.5">
+            {/* Fabric Sales - Commented */}
+            {/* <div className="space-y-1.5">
               <Label htmlFor="fabricSale" className="text-xs font-semibold text-stone-700 flex items-center gap-1">
                 <Layers className="h-3.5 w-3.5 text-stone-400" />
                 Fabric Sales <span className="text-red-500">*</span>
@@ -529,7 +640,7 @@ const CreateSales = () => {
                 onChange={onInputChange}
                 className="h-10 text-xs bg-white border-stone-200 focus:border-[#A27B5C] focus:ring-[#A27B5C]/20 rounded-xl text-stone-800 shadow-2xs font-medium"
               />
-            </div>
+            </div> */}
 
             {/* Remarks */}
             <div className="space-y-1.5 col-span-full">
@@ -559,7 +670,7 @@ const CreateSales = () => {
               </div>
               <div>
                 <h2 className="text-xs font-bold text-stone-800 uppercase tracking-wider">
-                  2. Garment T-Code Barcode Scanner
+                  Garment T-Code Barcode Scanner
                 </h2>
                 <p className="text-[11px] text-stone-500">
                   Scan or enter the unique barcode digits for each garment piece.
@@ -632,50 +743,68 @@ const CreateSales = () => {
               ) : (
                 <Plus className="h-4 w-4" />
               )}
-              Add T-Code
+              Add
             </Button>
           </div>
 
           {/* Scanned Barcodes Grid Area */}
           <div className="rounded-xl border border-stone-200 bg-white/80 p-3 min-h-[140px] max-h-[300px] overflow-y-auto shadow-inner">
-            {barcodes.length > 0 ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
-                {barcodes.map((barcode, index) => {
-                  const count = barcodes.filter((b) => b === barcode).length;
-                  const isDuplicate = count > 1;
+            {uniqueBarcodes.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">
+                {uniqueBarcodes.map((item) => {
+                  const isLimitReached = barcodes.length >= maxPcs;
 
                   return (
                     <div
-                      key={`${index}-${barcode}`}
-                      className={`group relative rounded-xl border p-2 text-xs flex items-center justify-between transition-all ${
-                        isDuplicate
-                          ? "bg-amber-50/80 border-amber-300 text-amber-900 shadow-2xs"
-                          : "bg-white border-stone-200/90 text-stone-800 hover:border-[#A27B5C] shadow-2xs"
-                      }`}
+                      key={item.barcode}
+                      className="group relative rounded-xl border border-[#E6DEC9] bg-[#FAF8F5] hover:bg-white p-2.5 text-xs flex items-center justify-between shadow-2xs hover:border-[#A27B5C] transition-all"
                     >
-                      <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-stone-100 text-[10px] font-bold text-stone-600">
-                          {index + 1}
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[#543D2B]/10 text-[10px] font-bold text-[#543D2B]">
+                          {item.index}
                         </span>
-                        <span className="font-mono font-bold truncate text-[11px]" title={barcode}>
-                          {barcode}
+                        <span className="font-mono font-bold truncate text-xs text-stone-800" title={item.barcode}>
+                          {item.barcode}
                         </span>
                       </div>
 
-                      <div className="flex items-center gap-1 pl-1">
-                        {isDuplicate && (
-                          <span className="rounded-md bg-amber-200/80 px-1.5 py-0.5 text-[9px] font-extrabold text-amber-800">
-                            x{count}
-                          </span>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => removeBarcode(index)}
-                          className="flex h-5 w-5 items-center justify-center rounded-md text-stone-400 hover:bg-rose-50 hover:text-rose-600 transition-colors cursor-pointer"
-                          title="Remove barcode"
+                      <div className="flex items-center gap-1.5 pl-1.5 shrink-0">
+                        {/* Multiplier Badge */}
+                        <span
+                          className="rounded-md bg-[#543D2B] text-white px-2 py-0.5 text-[11px] font-extrabold tracking-tight shadow-2xs"
+                          title={`${item.count} piece${item.count > 1 ? "s" : ""}`}
                         >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
+                          *{item.count}
+                        </span>
+
+                        {/* Quantity Controls */}
+                        <div className="flex items-center gap-0.5 bg-stone-100 rounded-lg p-0.5 border border-stone-200">
+                          <button
+                            type="button"
+                            onClick={() => removeOneBarcode(item.barcode)}
+                            className="flex h-5 w-5 items-center justify-center rounded-md text-stone-600 hover:bg-white hover:text-stone-900 transition-colors cursor-pointer"
+                            title="Decrease count by 1"
+                          >
+                            <Minus className="h-3 w-3" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => addOneBarcode(item.barcode)}
+                            disabled={isLimitReached}
+                            className="flex h-5 w-5 items-center justify-center rounded-md text-stone-600 hover:bg-white hover:text-stone-900 transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                            title={isLimitReached ? "Target pieces count reached" : "Increase count by 1"}
+                          >
+                            <Plus className="h-3 w-3" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removeAllOfBarcode(item.barcode)}
+                            className="flex h-5 w-5 items-center justify-center rounded-md text-rose-500 hover:bg-rose-50 hover:text-rose-700 transition-colors cursor-pointer ml-0.5"
+                            title="Remove this T-Code"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -695,19 +824,6 @@ const CreateSales = () => {
               </div>
             )}
           </div>
-
-          {/* Duplicate Warning Indicator */}
-          {Object.keys(duplicateBarcodes).length > 0 && (
-            <div className="flex items-center gap-2 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800 font-medium">
-              <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
-              <span>
-                Duplicate T-Codes detected:{" "}
-                {Object.entries(duplicateBarcodes)
-                  .map(([barcode, count]) => `${barcode} (${count}x)`)
-                  .join(", ")}
-              </span>
-            </div>
-          )}
         </div>
 
         {/* Footer Actions */}
@@ -729,12 +845,12 @@ const CreateSales = () => {
             {submitMutation.isPending ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin text-white" />
-                <span>Submitting Sales Order...</span>
+                <span>Submitting...</span>
               </>
             ) : (
               <>
                 <PackageCheck className="h-4 w-4" />
-                <span>Submit Sales Order</span>
+                <span>Submit</span>
               </>
             )}
           </Button>

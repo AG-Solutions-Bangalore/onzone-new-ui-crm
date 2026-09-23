@@ -99,7 +99,7 @@ const SalesList = () => {
     {
       accessorKey: "work_order_sa_no",
       id: "Work Order Sales No",
-      header: "Sales No",
+      header: "Sl.No",
       cell: ({ row }) => (
         <span className="font-semibold text-stone-800">
           {row.getValue("Work Order Sales No")}
@@ -132,10 +132,10 @@ const SalesList = () => {
 
     {
       accessorKey: "work_order_sa_dc_no",
-      id: "Dc No",
-      header: "Dc No",
+      id: "Packing Slip No",
+      header: "Packing Slip No",
       cell: ({ row }) => (
-        <span className="text-stone-700">{row.getValue("Dc No")}</span>
+        <span className="text-stone-700">{row.getValue("Packing Slip No")}</span>
       ),
     },
 
@@ -187,7 +187,7 @@ const SalesList = () => {
                     <Edit className="h-3.5 w-3.5" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Edit Sales</TooltipContent>
+                <TooltipContent>Edit</TooltipContent>
               </Tooltip>
             </TooltipProvider>
             <TooltipProvider>
@@ -206,7 +206,7 @@ const SalesList = () => {
                     <Eye className="h-3.5 w-3.5" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>View Sales</TooltipContent>
+                <TooltipContent>View Packing Slip</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>
@@ -261,10 +261,10 @@ const SalesList = () => {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3.5 bg-[#FDFBF7] border border-stone-200/80 px-5 py-3.5 rounded-2xl shadow-2xs">
           <div>
             <span className="text-[10px] uppercase tracking-wider font-semibold text-[#A27B5C]">
-              Sales Management
+              Sales Packing
             </span>
             <h1 className="font-heading text-lg font-bold text-stone-800 tracking-tight leading-none mt-0.5">
-              Work Order Sales List
+              Sales Packing List
             </h1>
           </div>
 
@@ -272,7 +272,7 @@ const SalesList = () => {
             <div className="relative w-full sm:w-64 flex items-center">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400 pointer-events-none" />
               <Input
-                placeholder="Search work order sales..."
+                placeholder="Search packing list..."
                 value={table.getState().globalFilter || ""}
                 onChange={(event) => table.setGlobalFilter(event.target.value)}
                 className="h-9 pl-9 pr-3 text-xs bg-white border-stone-200 focus:border-[#A27B5C] focus:ring-[#A27B5C]/20 rounded-xl text-stone-800 shadow-2xs"
@@ -316,7 +316,7 @@ const SalesList = () => {
               onClick={() => navigate("/sales/add-sales")}
               className="h-9 bg-[#A27B5C] hover:bg-[#8D6B4F] text-white rounded-xl text-xs font-semibold px-4 shadow-sm transition-all duration-200"
             >
-              <SquarePlus className="mr-1.5 h-4 w-4" /> Sales
+              <SquarePlus className="mr-1.5 h-4 w-4" />Create
             </Button>
           </div>
         </div>

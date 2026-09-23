@@ -57,7 +57,10 @@ import {
 import Page from "@/app/dashboard/page";
 import moment from "moment";
 
+import { useToast } from "@/hooks/use-toast";
+
 const ReceivedList = () => {
+  const { toast } = useToast();
   // ----- fetch data -----
   const {
     data: workorderrc,
@@ -83,29 +86,47 @@ const ReceivedList = () => {
   const [columnFilters, setColumnFilters] = useState([]);
   const [columnVisibility, setColumnVisibility] = useState({});
   const [rowSelection, setRowSelection] = useState({});
-  const [statusFilter, setStatusFilter] = useState("draft");
+  const [statusFilter, setStatusFilter] = useState("ontheway");
   const navigate = useNavigate();
+
+  const getNormalizedStatus = (status) => {
+    const s = (status || "").toLowerCase().trim().replace(/[\s_-]+/g, "");
+    if (s === "ontheway") return "ontheway";
+    if (s === "received") return "received";
+    if (s === "packed" || s === "draft") return "packed";
+    return s;
+  };
+
+  const onTheWayCount =
+    workorderrc?.filter(
+      (item) => getNormalizedStatus(item.work_order_rc_status) === "ontheway",
+    ).length || 0;
+
+  const packedCount =
+    workorderrc?.filter(
+      (item) => getNormalizedStatus(item.work_order_rc_status) === "packed",
+    ).length || 0;
 
   const receivedCount =
     workorderrc?.filter(
-      (item) => item.work_order_rc_status?.toLowerCase() === "received",
-    ).length || 0;
-
-  const draftCount =
-    workorderrc?.filter(
-      (item) => item.work_order_rc_status?.toLowerCase() !== "received",
+      (item) => getNormalizedStatus(item.work_order_rc_status) === "received",
     ).length || 0;
 
   const filteredData = React.useMemo(() => {
     if (!workorderrc) return [];
-    if (statusFilter === "received") {
+    if (statusFilter === "ontheway") {
       return workorderrc.filter(
-        (item) => item.work_order_rc_status?.toLowerCase() === "received",
+        (item) => getNormalizedStatus(item.work_order_rc_status) === "ontheway",
       );
     }
-    if (statusFilter === "draft") {
+    if (statusFilter === "packed") {
       return workorderrc.filter(
-        (item) => item.work_order_rc_status?.toLowerCase() !== "received",
+        (item) => getNormalizedStatus(item.work_order_rc_status) === "packed",
+      );
+    }
+    if (statusFilter === "received") {
+      return workorderrc.filter(
+        (item) => getNormalizedStatus(item.work_order_rc_status) === "received",
       );
     }
     return workorderrc;
@@ -120,17 +141,28 @@ const ReceivedList = () => {
   const updateStatusMutation = useMutation({
     mutationFn: async (id) => {
       const token = localStorage.getItem("token");
-      const response = await axios.put(
-        `${BASE_URL}/api/update-work-orders-received-factory-status/${id}`,
-        {},
+      const res1 = await axios.put(
+        `${BASE_URL}/api/update-work-order-received-finish-by-id/${id}`,
+        null,
         { headers: { Authorization: `Bearer ${token}` } },
       );
-      return response.data;
+      try {
+        await axios.put(
+          `${BASE_URL}/api/update-work-orders-received-factory-status/${id}`,
+          {},
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+      } catch (e) {}
+      return res1.data;
     },
     onMutate: (id) => {
       setUpdatingId(id);
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      toast({
+        title: "Success",
+        description: data?.msg || data?.message || "Order marked as received successfully",
+      });
       refetch();
     },
     onSettled: () => {
@@ -190,18 +222,28 @@ const ReceivedList = () => {
       id: "Status",
       header: "Status",
       cell: ({ row }) => {
-        const status = row.getValue("Status");
-        const statusColors = {
-          Active: "bg-green-100 text-green-800",
-          Received: "bg-red-100 text-red-800",
-        };
+        const rawStatus = row.getValue("Status") || "";
+        const norm = getNormalizedStatus(rawStatus);
+
+        let displayStatus = rawStatus;
+        let badgeClass = "bg-stone-100 text-stone-700 border-stone-200";
+
+        if (norm === "ontheway") {
+          displayStatus = "On the Way";
+          badgeClass = "bg-blue-50 text-blue-700 border-blue-200/80";
+        } else if (norm === "packed") {
+          displayStatus = "Packed";
+          badgeClass = "bg-stone-100 text-stone-700 border-stone-300";
+        } else if (norm === "received") {
+          displayStatus = "Received";
+          badgeClass = "bg-rose-50 text-rose-700 border-rose-200/80";
+        }
+
         return (
           <span
-            className={`px-2 py-1 rounded text-xs ${
-              statusColors[status] || "bg-gray-100 text-gray-800"
-            }`}
+            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${badgeClass}`}
           >
-            {status}
+            {displayStatus}
           </span>
         );
       },
@@ -233,39 +275,9 @@ const ReceivedList = () => {
                     <ReceiptText className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>DC Receipt</TooltipContent>
+                <TooltipContent>Packing Receipt</TooltipContent>
               </Tooltip>
             </TooltipProvider>
-
-            {/* Mark as Received button (only factory & not yet received) */}
-            {userType === "4" && orderReceivedStatus !== "Received" && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => {
-                        setConfirmOrderId(orderReceivedId);
-                        setConfirmDialogOpen(true);
-                      }}
-                      disabled={
-                        updateStatusMutation.isLoading &&
-                        updatingId === orderReceivedId
-                      }
-                    >
-                      {updateStatusMutation.isLoading &&
-                      updatingId === orderReceivedId ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <CheckCircle className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Mark as Received</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
           </div>
         );
       },
@@ -311,27 +323,24 @@ const ReceivedList = () => {
     <Page>
       <div className="w-full space-y-3.5 pt-1">
         {/* Unified Top Header & Actions Bar */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5 bg-[#FDFBF7] border border-stone-200/80 px-5 py-3.5 rounded-2xl shadow-2xs">
-          <div>
-            <span className="text-[10px] uppercase tracking-wider font-semibold text-[#A27B5C]">
-              Factory Outward
-            </span>
-            <h1 className="font-heading text-lg font-bold text-stone-800 tracking-tight leading-none mt-0.5">
+        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 bg-[#FDFBF7] border border-stone-200/80 px-5 py-3 rounded-2xl shadow-2xs">
+          <div className="shrink-0">
+            <h1 className="font-heading text-lg font-bold text-stone-800 tracking-tight leading-none whitespace-nowrap">
               {localStorage.getItem("userType") == 4
                 ? "New Packaging Slip List"
                 : "Goods Received from Factory"}
             </h1>
           </div>
 
-          <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="flex items-center gap-2 overflow-x-auto max-w-full pb-1 xl:pb-0">
             {/* Status Filter Buttons */}
-            <div className="flex items-center bg-[#F5F2EB] p-1 rounded-xl border border-stone-200/80 gap-1">
+            <div className="flex items-center bg-[#F5F2EB] p-1 rounded-xl border border-stone-200/80 gap-1 shrink-0">
               <button
                 type="button"
-                className={`h-7 px-3 text-xs font-semibold rounded-lg transition-all ${
+                className={`h-7 px-2.5 text-xs font-semibold rounded-lg transition-all cursor-pointer whitespace-nowrap ${
                   statusFilter === "all"
                     ? "bg-[#A27B5C] text-white shadow-none"
-                    : "text-stone-600 hover:text-stone-900"
+                    : "text-stone-600 hover:text-stone-900 hover:bg-stone-200/50"
                 }`}
                 onClick={() => setStatusFilter("all")}
               >
@@ -339,7 +348,35 @@ const ReceivedList = () => {
               </button>
               <button
                 type="button"
-                className={`h-7 px-3 text-xs font-semibold rounded-lg transition-all ${
+                className={`h-7 px-2.5 text-xs font-semibold rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+                  statusFilter === "ontheway"
+                    ? "bg-[#543D2B] text-white shadow-none"
+                    : "text-[#543D2B] hover:bg-[#543D2B]/10"
+                }`}
+                onClick={() =>
+                  setStatusFilter(
+                    statusFilter === "ontheway" ? "all" : "ontheway",
+                  )
+                }
+              >
+                On the Way ({onTheWayCount})
+              </button>
+              <button
+                type="button"
+                className={`h-7 px-2.5 text-xs font-semibold rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+                  statusFilter === "packed"
+                    ? "bg-stone-700 text-white shadow-none"
+                    : "text-stone-700 hover:bg-stone-200"
+                }`}
+                onClick={() =>
+                  setStatusFilter(statusFilter === "packed" ? "all" : "packed")
+                }
+              >
+                Packed ({packedCount})
+              </button>
+              <button
+                type="button"
+                className={`h-7 px-2.5 text-xs font-semibold rounded-lg transition-all cursor-pointer whitespace-nowrap ${
                   statusFilter === "received"
                     ? "bg-rose-600 text-white shadow-none"
                     : "text-rose-700 hover:bg-rose-50"
@@ -352,23 +389,10 @@ const ReceivedList = () => {
               >
                 Received ({receivedCount})
               </button>
-              <button
-                type="button"
-                className={`h-7 px-3 text-xs font-semibold rounded-lg transition-all ${
-                  statusFilter === "draft"
-                    ? "bg-stone-700 text-white shadow-none"
-                    : "text-stone-700 hover:bg-stone-200"
-                }`}
-                onClick={() =>
-                  setStatusFilter(statusFilter === "draft" ? "all" : "draft")
-                }
-              >
-                Draft ({draftCount})
-              </button>
             </div>
 
             {/* Search Input */}
-            <div className="relative w-full sm:w-60 flex items-center">
+            <div className="relative w-44 lg:w-52 shrink-0 flex items-center">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400 pointer-events-none" />
               <Input
                 placeholder="Search received..."
@@ -384,9 +408,9 @@ const ReceivedList = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-9 border-stone-200 text-stone-700 hover:bg-[#F5F2EB] rounded-xl text-xs shadow-2xs"
+                  className="h-9 border-stone-200 text-stone-700 hover:bg-[#F5F2EB] rounded-xl text-xs shadow-2xs shrink-0 cursor-pointer"
                 >
-                  Columns <ChevronDown className="ml-1.5 h-3.5 w-3.5 text-stone-500" />
+                  Columns <ChevronDown className="ml-1 h-3.5 w-3.5 text-stone-500" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent
@@ -512,7 +536,7 @@ const ReceivedList = () => {
               Confirm Completion
             </DialogTitle>
             <DialogDescription className="text-stone-600 text-xs">
-              Do you want to mark this order as <strong>Sent</strong>?
+              Do you want to mark this order as <strong>Received</strong>?
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ChevronLeft, Send, Trash2, Minus } from "lucide-react";
+import { ChevronLeft, Send, Trash2, Minus, Plus } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import * as z from "zod";
 import axios from "axios";
@@ -31,18 +31,19 @@ import { useToast } from "@/hooks/use-toast";
 import BASE_URL from "@/config/BaseUrl";
 
 const formSchema = z.object({
-  work_order_sa_dc_no: z.string().min(1, "DC No is required"),
-  work_order_sa_dc_date: z.string().min(1, "DC Date is required"),
-  work_order_sa_box: z.number().optional(),
-  work_order_sa_pcs: z.number().min(1, "Pieces count is required"),
-  work_order_sa_fabric_sale: z
-    .string()
-    .min(1, "Fabric sale status is required"),
+  work_order_sa_dc_no: z.string().min(1, "Packing Slip No is required"),
+  work_order_sa_dc_date: z.string().optional(),
+  work_order_sa_box: z.union([z.string(), z.number()]).optional(),
+  work_order_sa_pcs: z.union([
+    z.string().min(1, "Pieces count is required"),
+    z.number().min(1, "Pieces count is required"),
+  ]),
+  work_order_sa_fabric_sale: z.string().optional(),
   work_order_sa_remarks: z.string().optional(),
-  work_order_sa_count: z.number().optional(),
+  work_order_sa_count: z.union([z.string(), z.number()]).optional(),
   workorder_sub_sa_data: z.array(
     z.object({
-      id: z.number().optional(),
+      id: z.union([z.string(), z.number()]).optional(),
       work_order_sa_sub_barcode: z.string().min(1, "T Code is required"),
     })
   ),
@@ -52,6 +53,7 @@ const EditSales = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const itemsContainerRef = useRef(null);
 
   const [workorder, setWorkOrderSales] = useState({
     work_order_sa_date: "",
@@ -179,6 +181,18 @@ const EditSales = () => {
     setUsers((prev) =>
       prev.map((user, i) => (i === index ? { ...user, [name]: value } : user))
     );
+  };
+
+  const addItem = () => {
+    setUsers((prev) => [...prev, { id: "", work_order_sa_sub_barcode: "" }]);
+    setTimeout(() => {
+      if (itemsContainerRef.current) {
+        itemsContainerRef.current.scrollTo({
+          top: itemsContainerRef.current.scrollHeight,
+          behavior: "smooth",
+        });
+      }
+    }, 50);
   };
 
   // Show confirmation dialog for barcode deletion
@@ -356,9 +370,9 @@ const EditSales = () => {
           <CardContent className="p-4">
             <form className="space-y-2">
               {/* Basic Information Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="space-y-1">
-                  <Label htmlFor="work_order_sa_retailer_name">Retailers</Label>
+                  <Label htmlFor="work_order_sa_retailer_name">Retailer</Label>
                   <Input
                     id="work_order_sa_retailer_name"
                     name="work_order_sa_retailer_name"
@@ -383,36 +397,6 @@ const EditSales = () => {
                 </div>
 
                 <div className="space-y-1">
-                  <Label htmlFor="work_order_sa_dc_no">DC No</Label>
-                  <Input
-                    id="work_order_sa_dc_no"
-                    name="work_order_sa_dc_no"
-                    value={workorder.work_order_sa_dc_no}
-                    onChange={onInputChange}
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <Label htmlFor="work_order_sa_dc_date">DC Date</Label>
-                  <Input
-                    id="work_order_sa_dc_date"
-                    type="date"
-                    name="work_order_sa_dc_date"
-                    value={workorder.work_order_sa_dc_date}
-                    onChange={onInputChange}
-                  />
-                </div>
-                <div className="space-y-1 hidden">
-                  <Label htmlFor="work_order_sa_dc_date">No of Box</Label>
-                  <Input
-                    id="work_order_sa_box"
-                    name="work_order_sa_box"
-                    value={workorder.work_order_sa_box}
-                    onChange={onInputChange}
-                  />
-                </div>
-
-                <div className="space-y-1">
                   <Label htmlFor="work_order_sa_pcs">Total No of Pcs</Label>
                   <Input
                     id="work_order_sa_pcs"
@@ -423,6 +407,39 @@ const EditSales = () => {
                 </div>
 
                 <div className="space-y-1">
+                  <Label htmlFor="work_order_sa_dc_no">Packing Slip No</Label>
+                  <Input
+                    id="work_order_sa_dc_no"
+                    name="work_order_sa_dc_no"
+                    value={workorder.work_order_sa_dc_no}
+                    onChange={onInputChange}
+                  />
+                </div>
+
+                {/* DC Date - Commented */}
+                {/* <div className="space-y-1">
+                  <Label htmlFor="work_order_sa_dc_date">DC Date</Label>
+                  <Input
+                    id="work_order_sa_dc_date"
+                    type="date"
+                    name="work_order_sa_dc_date"
+                    value={workorder.work_order_sa_dc_date}
+                    onChange={onInputChange}
+                  />
+                </div> */}
+
+                <div className="space-y-1 hidden">
+                  <Label htmlFor="work_order_sa_box">No of Box</Label>
+                  <Input
+                    id="work_order_sa_box"
+                    name="work_order_sa_box"
+                    value={workorder.work_order_sa_box}
+                    onChange={onInputChange}
+                  />
+                </div>
+
+                {/* Fabric Sales - Commented */}
+                {/* <div className="space-y-1">
                   <Label htmlFor="work_order_sa_fabric_sale">
                     Fabric Sales
                   </Label>
@@ -432,9 +449,9 @@ const EditSales = () => {
                     value={workorder.work_order_sa_fabric_sale}
                     onChange={onInputChange}
                   />
-                </div>
+                </div> */}
 
-                <div className="lg:col-span-3 space-y-1">
+                <div className="col-span-full space-y-1">
                   <Label htmlFor="work_order_sa_remarks">Remarks</Label>
                   <Textarea
                     id="work_order_sa_remarks"
@@ -457,45 +474,52 @@ const EditSales = () => {
                       {users.length} item(s)
                     </span>
                   </h4>
+
+                  <Button
+                    type="button"
+                    onClick={addItem}
+                    size="sm"
+                    className="h-8 px-3.5 bg-[#543D2B] hover:bg-[#412E20] text-white rounded-xl text-xs font-bold shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add
+                  </Button>
                 </div>
 
-                <div className="grid gap-2.5">
-                  {users.map((user, index) => (
-                    <div
-                      key={index}
-                      className="bg-[#FDFBF7] border border-stone-200/80 rounded-2xl p-3.5 shadow-2xs"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex-1">
-                          <Input
-                            type="hidden"
-                            name="id"
-                            value={user.id}
-                            onChange={(e) => onChange(e, index)}
-                          />
+                {/* Compact Scrollable Grid */}
+                <div
+                  ref={itemsContainerRef}
+                  className="rounded-2xl border border-stone-200/80 bg-white/70 p-3 min-h-[140px] max-h-[350px] overflow-y-auto shadow-inner"
+                >
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">
+                    {users.map((user, index) => (
+                      <div
+                        key={index}
+                        className="bg-[#FAF8F5] hover:bg-white border border-[#E6DEC9] hover:border-[#A27B5C] rounded-xl p-2.5 shadow-2xs transition-all flex flex-col justify-between gap-1.5"
+                      >
+                        <Input
+                          type="hidden"
+                          name="id"
+                          value={user.id}
+                          onChange={(e) => onChange(e, index)}
+                        />
 
-                          <div className="space-y-1">
-                            <Label htmlFor={`tcode_${index}`} className="text-xs font-bold text-stone-800">
-                              T Code #{index + 1}
+                        <div className="flex items-center justify-between gap-1.5">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-[#543D2B]/10 text-[10px] font-bold text-[#543D2B]">
+                              {index + 1}
+                            </span>
+                            <Label htmlFor={`tcode_${index}`} className="text-[11px] font-bold text-stone-700 truncate">
+                              T-Code #{index + 1}
                             </Label>
-                            <Input
-                              id={`tcode_${index}`}
-                              name="work_order_sa_sub_barcode"
-                              value={user.work_order_sa_sub_barcode}
-                              onChange={(e) => onChange(e, index)}
-                              placeholder="Enter T Code"
-                              className="h-9 text-xs px-3 bg-white border border-stone-200 focus:border-[#A27B5C] focus:ring-2 focus:ring-[#A27B5C]/15 rounded-xl text-stone-900 font-mono tracking-wider font-semibold"
-                            />
                           </div>
-                        </div>
 
-                        <div className="flex items-end self-end">
                           <Button
-                            variant="outline"
+                            variant="ghost"
                             size="icon"
                             type="button"
                             onClick={() => confirmBarcodeDelete(index, user.work_order_sa_sub_barcode, user.id)}
-                            className="h-9 w-9 border-stone-200 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                            className="h-6 w-6 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer shrink-0"
                             title={user.id ? "Delete from database" : "Remove locally"}
                           >
                             {user.id ? (
@@ -505,9 +529,21 @@ const EditSales = () => {
                             )}
                           </Button>
                         </div>
+
+                        <Input
+                          id={`tcode_${index}`}
+                          name="work_order_sa_sub_barcode"
+                          value={user.work_order_sa_sub_barcode}
+                          onChange={(e) => {
+                            const value = e.target.value.toUpperCase().replace(/\s/g, "");
+                            onChange({ target: { name: "work_order_sa_sub_barcode", value } }, index);
+                          }}
+                          placeholder="ENTER T-CODE..."
+                          className="h-8 text-xs px-2.5 bg-white border border-stone-200 focus:border-[#A27B5C] focus:ring-1 focus:ring-[#A27B5C]/20 rounded-lg text-stone-900 font-mono tracking-wider font-semibold uppercase"
+                        />
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               </div>
 

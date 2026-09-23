@@ -232,36 +232,6 @@ const OrderReceivedList = () => {
                 <TooltipContent>Packing List</TooltipContent>
               </Tooltip>
             </TooltipProvider>
-
-            {/* Mark as Received button (only factory & not yet received) */}
-            {userType === "4" && orderReceivedStatus !== "Received" && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => {
-                        setConfirmOrderId(orderReceivedId);
-                        setConfirmDialogOpen(true);
-                      }}
-                      disabled={
-                        updateStatusMutation.isLoading &&
-                        updatingId === orderReceivedId
-                      }
-                    >
-                      {updateStatusMutation.isLoading &&
-                      updatingId === orderReceivedId ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <CheckCircle className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Mark as Received</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
           </div>
         );
       },
