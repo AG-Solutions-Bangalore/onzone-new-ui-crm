@@ -244,7 +244,7 @@ const AddBrand = () => {
           </div>
 
           {/* Size Rates / Specifications */}
-          <div className="space-y-2 pt-2 border-t border-stone-200">
+          {/* <div className="space-y-2 pt-2 border-t border-stone-200">
             <Label className="text-xs font-bold text-stone-800 uppercase tracking-wider">
               Size Specifications
             </Label>
@@ -278,7 +278,7 @@ const AddBrand = () => {
                 </div>
               ))}
             </div>
-          </div>
+          </div> */}
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0 pt-2">
