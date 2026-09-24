@@ -430,14 +430,14 @@ const CreateWorkOrder = () => {
 
         <div className="p-4 bg-white rounded-lg shadow">
           <form id="addIndiv" autoComplete="off">
-            <div className="grid grid-cols-1 gap-4  md:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
               {/* Factory */}
               <div className="space-y-1">
-                <Label htmlFor="work_order_factory_no">
+                <Label htmlFor="work_order_factory_no" className="text-xs sm:text-sm font-medium">
                   Factory <span className="text-red-500">*</span>
                 </Label>
                 <Select
-                  className="react-select-container"
+                  className="react-select-container text-xs sm:text-sm"
                   classNamePrefix="react-select"
                   placeholder="Search factory..."
                   options={
@@ -468,11 +468,11 @@ const CreateWorkOrder = () => {
 
               {/* Brand */}
               <div className="space-y-1">
-                <Label htmlFor="work_order_brand">
+                <Label htmlFor="work_order_brand" className="text-xs sm:text-sm font-medium">
                   Brand <span className="text-red-500">*</span>
                 </Label>
                 <Select
-                  className="react-select-container"
+                  className="react-select-container text-xs sm:text-sm"
                   classNamePrefix="react-select"
                   placeholder="Search brand..."
                   options={
@@ -504,24 +504,25 @@ const CreateWorkOrder = () => {
               {/* Other Brand */}
               {workorder.work_order_brand === "Other" && (
                 <div className="space-y-1">
-                  <Label htmlFor="work_order_brand_other">Other Brand</Label>
+                  <Label htmlFor="work_order_brand_other" className="text-xs sm:text-sm font-medium">Other Brand</Label>
                   <Input
                     type="text"
                     name="work_order_brand_other"
                     value={workorder.work_order_brand_other}
                     onChange={onInputChange}
                     required={workorder.work_order_brand === "Other"}
+                    className="h-9 text-xs sm:text-sm"
                   />
                 </div>
               )}
 
               {/* Width */}
               <div className="space-y-1">
-                <Label htmlFor="work_order_width">
+                <Label htmlFor="work_order_width" className="text-xs sm:text-sm font-medium">
                   Width <span className="text-red-500">*</span>
                 </Label>
                 <Select
-                  className="react-select-container"
+                  className="react-select-container text-xs sm:text-sm"
                   classNamePrefix="react-select"
                   placeholder="Search width..."
                   options={
@@ -552,11 +553,11 @@ const CreateWorkOrder = () => {
 
               {/* Half Ratio */}
               <div className="space-y-1">
-                <Label htmlFor="work_order_ratio_h">
+                <Label htmlFor="work_order_ratio_h" className="text-xs sm:text-sm font-medium">
                   Half Ratio <span className="text-red-500">*</span>
                 </Label>
                 <Select
-                  className="react-select-container"
+                  className="react-select-container text-xs sm:text-sm"
                   classNamePrefix="react-select"
                   placeholder="Search half ratio..."
                   options={
@@ -589,7 +590,7 @@ const CreateWorkOrder = () => {
 
               {/* Half Consumption */}
               <div className="space-y-1">
-                <Label htmlFor="work_order_ratio_h_consumption">
+                <Label htmlFor="work_order_ratio_h_consumption" className="text-xs sm:text-sm font-medium">
                   Half Consumption <span className="text-red-500">*</span>
                 </Label>
                 <Input
@@ -598,16 +599,17 @@ const CreateWorkOrder = () => {
                   value={workorder.work_order_ratio_h_consumption}
                   onChange={onInputChange}
                   required
+                  className="h-9 text-xs sm:text-sm"
                 />
               </div>
 
               {/* Full Ratio */}
               <div className="space-y-1">
-                <Label htmlFor="work_order_ratio">
+                <Label htmlFor="work_order_ratio" className="text-xs sm:text-sm font-medium">
                   Full Ratio <span className="text-red-500">*</span>
                 </Label>
                 <Select
-                  className="react-select-container"
+                  className="react-select-container text-xs sm:text-sm"
                   classNamePrefix="react-select"
                   placeholder="Search full ratio..."
                   options={
@@ -638,7 +640,7 @@ const CreateWorkOrder = () => {
 
               {/* Full Consumption */}
               <div className="space-y-1">
-                <Label htmlFor="work_order_ratio_consumption">
+                <Label htmlFor="work_order_ratio_consumption" className="text-xs sm:text-sm font-medium">
                   Full Consumption <span className="text-red-500">*</span>
                 </Label>
                 <Input
@@ -647,37 +649,77 @@ const CreateWorkOrder = () => {
                   value={workorder.work_order_ratio_consumption}
                   onChange={onInputChange}
                   required
+                  className="h-9 text-xs sm:text-sm"
                 />
               </div>
 
-              {/* Is Order 38/39 Checkbox */}
-              <div className="flex items-center space-x-2 pt-6">
-                <input
-                  type="checkbox"
-                  id="work_order_38_39"
-                  name="work_order_38_39"
-                  checked={workorder.work_order_38_39 === "Yes"}
-                  onChange={(e) => {
-                    const checked = e.target.checked;
-                    setWorkOrder((prev) => ({
-                      ...prev,
-                      work_order_38_39: checked ? "Yes" : "No",
-                    }));
-                  }}
-                  className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                />
-                <Label htmlFor="work_order_38_39" className="text-sm font-medium leading-none cursor-pointer">
-                  Is this order 38/39?
+              {/* Order Size Toggle */}
+              <div className="space-y-1">
+                <Label htmlFor="work_order_38_39" className="text-xs sm:text-sm font-medium">
+                  Order Size
                 </Label>
+                <div
+                  className="relative flex items-center bg-slate-900 p-0.5 rounded-full h-9 select-none cursor-pointer shadow-inner"
+                  role="group"
+                  aria-label="Order Size Selection"
+                >
+                  {/* Sliding Beige Capsule */}
+                  <div
+                    className={`absolute top-0.5 bottom-0.5 w-[calc(50%-2px)] bg-[#E5D7C3] rounded-full shadow-sm transition-all duration-300 ease-out ${
+                      workorder.work_order_38_39 === "Yes" ? "left-[calc(50%+1px)]" : "left-0.5"
+                    }`}
+                  />
+
+                  {/* 36/38 Option */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWorkOrder((prev) => ({
+                        ...prev,
+                        work_order_38_39: "No",
+                      }));
+                    }}
+                    className={`relative z-10 w-1/2 h-full text-[11px] font-semibold rounded-full transition-colors duration-200 flex items-center justify-center cursor-pointer ${
+                      workorder.work_order_38_39 === "Yes"
+                        ? "text-stone-300 hover:text-white"
+                        : "text-[#543D2B] font-extrabold"
+                    }`}
+                  >
+                    36/38
+                  </button>
+
+                  {/* 38/39 Option */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWorkOrder((prev) => ({
+                        ...prev,
+                        work_order_38_39: "Yes",
+                      }));
+                    }}
+                    className={`relative z-10 w-1/2 h-full text-[11px] font-semibold rounded-full transition-colors duration-200 flex items-center justify-center cursor-pointer ${
+                      workorder.work_order_38_39 === "Yes"
+                        ? "text-[#543D2B] font-extrabold"
+                        : "text-stone-300 hover:text-white"
+                    }`}
+                  >
+                    38/39
+                  </button>
+                </div>
               </div>
 
               {/* Remarks */}
-              <div className="col-span-full space-y-2">
-                <Label htmlFor="work_order_remarks">Remarks</Label>
-                <Textarea
+              <div className="space-y-1 lg:col-span-2">
+                <Label htmlFor="work_order_remarks" className="text-xs sm:text-sm font-medium">
+                  Remarks
+                </Label>
+                <Input
+                  type="text"
                   name="work_order_remarks"
                   value={workorder.work_order_remarks}
                   onChange={onInputChange}
+                  placeholder="Enter remarks..."
+                  className="h-9 text-xs sm:text-sm"
                 />
               </div>
             </div>

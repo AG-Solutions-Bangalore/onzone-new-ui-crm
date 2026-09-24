@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ChevronLeft, Send, Trash2, Minus, Plus } from "lucide-react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { ChevronLeft, Send, Trash2, Minus, Plus, PackageCheck, ArrowRight } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as z from "zod";
 import axios from "axios";
 
@@ -53,6 +53,7 @@ const EditSales = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const itemsContainerRef = useRef(null);
 
   const [workorder, setWorkOrderSales] = useState({
@@ -76,6 +77,15 @@ const EditSales = () => {
     isOpen: false,
     data: null, // { index, barcode, dbId }
     message: ""
+  });
+
+  // Update confirmation dialog state
+  const [confirmUpdateDialog, setConfirmUpdateDialog] = useState({
+    isOpen: false,
+    initialCount: 0,
+    currentCount: 0,
+    addedCount: 0,
+    pendingData: null,
   });
 
   const {
@@ -242,6 +252,9 @@ const EditSales = () => {
           headers: { Authorization: `Bearer ${token}` },
         }
       );
+      queryClient.invalidateQueries({ queryKey: ["workOrderSalesList"] });
+      queryClient.invalidateQueries({ queryKey: ["workOrderSales", id] });
+      queryClient.invalidateQueries({ queryKey: ["salesPackingListView", id] });
       return true;
     } catch (error) {
       toast({
@@ -267,6 +280,12 @@ const EditSales = () => {
     },
     onSuccess: (data) => {
       if (data?.code === "200" || data?.code === 200) {
+        // Automatically invalidate all related queries so tables and views reflect the update immediately
+        queryClient.invalidateQueries({ queryKey: ["workOrderSalesList"] });
+        queryClient.invalidateQueries({ queryKey: ["workOrderSales", id] });
+        queryClient.invalidateQueries({ queryKey: ["salesPackingListView", id] });
+        queryClient.invalidateQueries({ queryKey: ["workOrderSales"] });
+
         toast({
           title: "Success",
           description: "Work Order Sales Updated Successfully",
@@ -289,18 +308,44 @@ const EditSales = () => {
     },
   });
 
+  const executeSubmit = (dataToSubmit) => {
+    updateOrderSalesMutation.mutate(dataToSubmit);
+  };
+
+  const getCleanSubData = () => {
+    return users
+      .filter(
+        (u) =>
+          u.work_order_sa_sub_barcode &&
+          u.work_order_sa_sub_barcode.trim() !== ""
+      )
+      .map((u) => {
+        const item = {
+          work_order_sa_sub_barcode: u.work_order_sa_sub_barcode.trim(),
+        };
+        if (u.id) {
+          item.id = u.id;
+        }
+        return item;
+      });
+  };
+
   const onSubmit = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
+
+    const cleanSubData = getCleanSubData();
+    const currentCount = cleanSubData.length;
+    const currentPcs = parseInt(workorder.work_order_sa_pcs) || 0;
 
     const data = {
       work_order_sa_dc_no: workorder.work_order_sa_dc_no,
       work_order_sa_dc_date: workorder.work_order_sa_dc_date,
       work_order_sa_box: parseInt(workorder.work_order_sa_box) || 0,
-      work_order_sa_pcs: parseInt(workorder.work_order_sa_pcs) || 0,
+      work_order_sa_pcs: currentPcs,
       work_order_sa_fabric_sale: workorder.work_order_sa_fabric_sale,
       work_order_sa_remarks: workorder.work_order_sa_remarks,
-      workorder_sub_sa_data: users,
-      work_order_sa_count: parseInt(workorder.work_order_sa_count) || 0,
+      workorder_sub_sa_data: cleanSubData,
+      work_order_sa_count: parseInt(workorder.work_order_sa_count) || currentCount,
     };
 
     const validation = formSchema.safeParse(data);
@@ -331,7 +376,59 @@ const EditSales = () => {
       return;
     }
 
-    updateOrderSalesMutation.mutate(data);
+    const initialCount =
+      parseInt(workOrderData?.workordersales?.work_order_sa_count) ||
+      parseInt(workOrderData?.workordersales?.work_order_sa_pcs) ||
+      workOrderData?.workordersalessub?.length ||
+      0;
+    const diff = currentCount - initialCount;
+
+    // Trigger double confirmation if T-Code count changed or differs from Pcs count
+    if (currentCount !== initialCount || currentCount !== currentPcs) {
+      setConfirmUpdateDialog({
+        isOpen: true,
+        initialCount,
+        currentCount,
+        addedCount: diff,
+        pendingData: data,
+      });
+      return;
+    }
+
+    executeSubmit(data);
+  };
+
+  const handleConfirmedUpdate = () => {
+    const cleanSubData = getCleanSubData();
+    const count = cleanSubData.length;
+
+    const dataToSubmit = {
+      work_order_sa_dc_no: workorder.work_order_sa_dc_no,
+      work_order_sa_dc_date: workorder.work_order_sa_dc_date,
+      work_order_sa_box: parseInt(workorder.work_order_sa_box) || 0,
+      work_order_sa_pcs: count,
+      work_order_sa_fabric_sale: workorder.work_order_sa_fabric_sale,
+      work_order_sa_remarks: workorder.work_order_sa_remarks,
+      workorder_sub_sa_data: cleanSubData,
+      work_order_sa_count: count,
+    };
+
+    // Update local state Total No of Pcs and Count
+    setWorkOrderSales((prev) => ({
+      ...prev,
+      work_order_sa_pcs: count,
+      work_order_sa_count: count,
+    }));
+
+    setConfirmUpdateDialog({
+      isOpen: false,
+      initialCount: 0,
+      currentCount: 0,
+      addedCount: 0,
+      pendingData: null,
+    });
+
+    executeSubmit(dataToSubmit);
   };
 
   if (isLoading) {
@@ -591,6 +688,96 @@ const EditSales = () => {
               className="bg-red-600 hover:bg-red-700"
             >
               {deleteDialog.data?.dbId ? 'Delete' : 'Remove'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Update Count Confirmation Dialog */}
+      <AlertDialog
+        open={confirmUpdateDialog.isOpen}
+        onOpenChange={(open) =>
+          !open &&
+          setConfirmUpdateDialog({
+            isOpen: false,
+            initialCount: 0,
+            currentCount: 0,
+            addedCount: 0,
+            pendingData: null,
+          })
+        }
+      >
+        <AlertDialogContent className="max-w-md rounded-2xl p-6 bg-white border border-stone-200 shadow-xl">
+          <AlertDialogHeader className="space-y-2">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#E5D7C3] text-[#543D2B]">
+                <PackageCheck className="h-5 w-5" />
+              </div>
+              <div>
+                <AlertDialogTitle className="text-base font-bold text-stone-900">
+                  Confirm Pcs & T-Code Update
+                </AlertDialogTitle>
+                <p className="text-xs text-stone-500">
+                  Verify the updated number of pieces before saving
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-3 p-3.5 bg-[#FAF8F5] rounded-xl border border-[#E6DEC9] space-y-3">
+              <div className="grid grid-cols-3 gap-2 text-center items-center">
+                <div className="bg-white p-2 rounded-lg border border-stone-200 shadow-2xs">
+                  <p className="text-[10px] uppercase font-bold text-stone-400">Previous Pcs</p>
+                  <p className="text-base font-extrabold text-stone-700">{confirmUpdateDialog.initialCount}</p>
+                </div>
+
+                <div className="flex flex-col items-center justify-center">
+                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                    confirmUpdateDialog.addedCount >= 0
+                      ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                      : "bg-amber-100 text-amber-700 border border-amber-200"
+                  }`}>
+                    {confirmUpdateDialog.addedCount >= 0 ? `+${confirmUpdateDialog.addedCount} Added` : `${confirmUpdateDialog.addedCount} Removed`}
+                  </span>
+                  <ArrowRight className="h-4 w-4 text-stone-400 mt-1" />
+                </div>
+
+                <div className="bg-[#E5D7C3]/60 p-2 rounded-lg border border-[#D8C7B0] shadow-2xs">
+                  <p className="text-[10px] uppercase font-bold text-[#543D2B]">New Total Pcs</p>
+                  <p className="text-base font-black text-[#543D2B]">{confirmUpdateDialog.currentCount}</p>
+                </div>
+              </div>
+
+              <AlertDialogDescription className="text-xs text-stone-600 leading-relaxed text-left">
+                Earlier, the Total No of Pcs was{" "}
+                <strong className="text-stone-900 font-bold">{confirmUpdateDialog.initialCount}</strong>.
+                {confirmUpdateDialog.addedCount > 0 ? (
+                  <>
+                    {" "}You have added{" "}
+                    <strong className="text-[#543D2B] font-bold">
+                      {confirmUpdateDialog.addedCount} new T-Code{confirmUpdateDialog.addedCount > 1 ? "s" : ""}
+                    </strong> (Total: <strong className="text-stone-900">{confirmUpdateDialog.currentCount}</strong>).
+                  </>
+                ) : (
+                  <>
+                    {" "}You have modified the T-Codes to a total of{" "}
+                    <strong className="text-stone-900 font-bold">{confirmUpdateDialog.currentCount}</strong>.
+                  </>
+                )}
+                <br />
+                Do you want to update the <span className="font-semibold text-stone-900">Total No of Pcs</span> to{" "}
+                <strong className="text-[#543D2B] font-extrabold">{confirmUpdateDialog.currentCount}</strong> and proceed with updating this sale?
+              </AlertDialogDescription>
+            </div>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="mt-4 gap-2">
+            <AlertDialogCancel className="h-9 rounded-xl text-xs font-semibold cursor-pointer">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmedUpdate}
+              className="h-9 px-4 bg-[#543D2B] hover:bg-[#412E20] text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer"
+            >
+              Yes, Update to {confirmUpdateDialog.currentCount} Pcs
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
