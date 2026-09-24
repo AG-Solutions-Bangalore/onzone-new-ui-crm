@@ -147,7 +147,7 @@ const BrandList = () => {
     {
       accessorKey: "fabric_brand_images",
       id: "Images",
-      header: "Images",
+      header: () => <div className="text-left">Images</div>,
       cell: ({ row }) => {
         const brandImage = row.original.fabric_brand_images;
         const imageUrl = brandImage
@@ -162,7 +162,6 @@ const BrandList = () => {
               setPreviewImage({
                 url: imageUrl,
                 brand: row.original.fabric_brand_brands,
-                short: row.original.fabric_brand_short,
                 status: row.original.fabric_brand_status,
               })
             }
@@ -186,15 +185,87 @@ const BrandList = () => {
     {
       accessorKey: "fabric_brand_brands",
       id: "Brand",
-      header: "Brand",
+      header: () => <div className="text-left min-w-[120px]">Brand</div>,
       cell: ({ row }) => (
-        <div className="font-semibold text-stone-800">{row.getValue("Brand")}</div>
+        <div className="font-semibold text-stone-800 whitespace-nowrap min-w-[120px]">{row.getValue("Brand")}</div>
+      ),
+    },
+    {
+      accessorKey: "fabric_brand_36",
+      id: "Size 36",
+      header: () => <div className="text-center min-w-[65px]">Size 36</div>,
+      cell: ({ row }) => (
+        <div className="text-center font-medium text-stone-700 min-w-[65px]">{row.getValue("Size 36") ?? "-"}</div>
+      ),
+    },
+    {
+      accessorKey: "fabric_brand_38",
+      id: "Size 38",
+      header: () => <div className="text-center min-w-[65px]">Size 38</div>,
+      cell: ({ row }) => (
+        <div className="text-center font-medium text-stone-700 min-w-[65px]">{row.getValue("Size 38") ?? "-"}</div>
+      ),
+    },
+    {
+      accessorKey: "fabric_brand_39",
+      id: "Size 39",
+      header: () => <div className="text-center min-w-[65px]">Size 39</div>,
+      cell: ({ row }) => (
+        <div className="text-center font-medium text-stone-700 min-w-[65px]">{row.getValue("Size 39") ?? "-"}</div>
+      ),
+    },
+    {
+      accessorKey: "fabric_brand_40",
+      id: "Size 40",
+      header: () => <div className="text-center min-w-[65px]">Size 40</div>,
+      cell: ({ row }) => (
+        <div className="text-center font-medium text-stone-700 min-w-[65px]">{row.getValue("Size 40") ?? "-"}</div>
+      ),
+    },
+    {
+      accessorKey: "fabric_brand_42",
+      id: "Size 42",
+      header: () => <div className="text-center min-w-[65px]">Size 42</div>,
+      cell: ({ row }) => (
+        <div className="text-center font-medium text-stone-700 min-w-[65px]">{row.getValue("Size 42") ?? "-"}</div>
+      ),
+    },
+    {
+      accessorKey: "fabric_brand_44",
+      id: "Size 44",
+      header: () => <div className="text-center min-w-[65px]">Size 44</div>,
+      cell: ({ row }) => (
+        <div className="text-center font-medium text-stone-700 min-w-[65px]">{row.getValue("Size 44") ?? "-"}</div>
+      ),
+    },
+    {
+      accessorKey: "fabric_brand_46",
+      id: "Size 46",
+      header: () => <div className="text-center min-w-[65px]">Size 46</div>,
+      cell: ({ row }) => (
+        <div className="text-center font-medium text-stone-700 min-w-[65px]">{row.getValue("Size 46") ?? "-"}</div>
+      ),
+    },
+    {
+      accessorKey: "fabric_brand_48",
+      id: "Size 48",
+      header: () => <div className="text-center min-w-[65px]">Size 48</div>,
+      cell: ({ row }) => (
+        <div className="text-center font-medium text-stone-700 min-w-[65px]">{row.getValue("Size 48") ?? "-"}</div>
+      ),
+    },
+    {
+      accessorKey: "fabric_brand_50",
+      id: "Size 50",
+      header: () => <div className="text-center min-w-[65px]">Size 50</div>,
+      cell: ({ row }) => (
+        <div className="text-center font-medium text-stone-700 min-w-[65px]">{row.getValue("Size 50") ?? "-"}</div>
       ),
     },
     {
       accessorKey: "fabric_brand_status",
       id: "Status",
-      header: "Status",
+      header: () => <div className="text-center min-w-[75px]">Status</div>,
       cell: ({ row }) => {
         const status = row.getValue("Status");
         const statusColors = {
@@ -203,24 +274,26 @@ const BrandList = () => {
         };
 
         return (
-          <span
-            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
-              statusColors[status] || "bg-stone-100 text-stone-600 border-stone-200"
-            }`}
-          >
-            {status}
-          </span>
+          <div className="flex justify-center min-w-[75px]">
+            <span
+              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
+                statusColors[status] || "bg-stone-100 text-stone-600 border-stone-200"
+              }`}
+            >
+              {status}
+            </span>
+          </div>
         );
       },
     },
     {
       id: "actions",
-      header: "Action",
+      header: () => <div className="text-center min-w-[80px]">Action</div>,
       cell: ({ row }) => {
         const brandId = row.original.id;
 
         return (
-          <div className="flex items-center space-x-1">
+          <div className="flex items-center justify-center space-x-1 min-w-[80px]">
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -330,7 +403,7 @@ const BrandList = () => {
                   Columns <ChevronDown className="ml-1.5 h-3.5 w-3.5 text-stone-500" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="bg-[#FDFBF7] border border-stone-200/80 rounded-xl shadow-lg">
+              <DropdownMenuContent align="end" className="bg-[#FDFBF7] border border-stone-200/80 rounded-xl shadow-lg max-h-64 overflow-y-auto">
                 {table
                   .getAllColumns()
                   .filter((column) => column.getCanHide())
@@ -365,7 +438,7 @@ const BrandList = () => {
                     return (
                       <TableHead
                         key={header.id}
-                        className="text-stone-700 font-bold text-xs uppercase tracking-wider py-2.5 px-4"
+                        className="text-stone-700 font-bold text-xs uppercase tracking-wider py-3 px-3 whitespace-nowrap"
                       >
                         {header.isPlaceholder
                           ? null
@@ -388,7 +461,7 @@ const BrandList = () => {
                     className="border-b border-stone-100 hover:bg-[#FDFBF7] transition-colors"
                   >
                     {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id} className="py-2 px-4 text-stone-700 text-xs">
+                      <TableCell key={cell.id} className="py-2.5 px-3 text-stone-700 text-xs whitespace-nowrap">
                         {flexRender(
                           cell.column.columnDef.cell,
                           cell.getContext(),
@@ -453,13 +526,8 @@ const BrandList = () => {
       <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>
         <DialogContent className="max-w-md p-6 bg-[#FDFBF7] border border-stone-200/80 rounded-2xl shadow-xl">
           <DialogHeader className="space-y-1">
-            <DialogTitle className="font-heading text-lg font-bold text-stone-800 flex items-center justify-between">
-              <span>{previewImage?.brand || "Brand Logo Preview"}</span>
-              {previewImage?.short && (
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-[#F5F2EB] text-[#A27B5C] border border-[#A27B5C]/20">
-                  {previewImage.short}
-                </span>
-              )}
+            <DialogTitle className="font-heading text-lg font-bold text-stone-800">
+              {previewImage?.brand || "Brand Logo Preview"}
             </DialogTitle>
           </DialogHeader>
           <div className="flex flex-col items-center gap-4 pt-2">
