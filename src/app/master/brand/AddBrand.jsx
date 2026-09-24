@@ -28,6 +28,15 @@ const AddBrand = () => {
     fabric_brand_brands: "",
     fabric_brand_images: "",
     fabric_brand_short: "",
+    fabric_brand_36: "",
+    fabric_brand_38: "",
+    fabric_brand_39: "",
+    fabric_brand_40: "",
+    fabric_brand_42: "",
+    fabric_brand_44: "",
+    fabric_brand_46: "",
+    fabric_brand_48: "",
+    fabric_brand_50: "",
   });
   const [selectedFile, setSelectedFile] = useState(null);
 
@@ -64,7 +73,7 @@ const AddBrand = () => {
     ) {
       toast({
         title: "Error",
-        description: "Please fill all fields",
+        description: "Please fill all required fields",
         variant: "destructive",
       });
       return;
@@ -76,6 +85,15 @@ const AddBrand = () => {
     data.append("fabric_brand_brands", formData.fabric_brand_brands);
     data.append("fabric_brand_images", selectedFile);
     data.append("fabric_brand_short", formData.fabric_brand_short);
+    data.append("fabric_brand_36", formData.fabric_brand_36 || "");
+    data.append("fabric_brand_38", formData.fabric_brand_38 || "");
+    data.append("fabric_brand_39", formData.fabric_brand_39 || "");
+    data.append("fabric_brand_40", formData.fabric_brand_40 || "");
+    data.append("fabric_brand_42", formData.fabric_brand_42 || "");
+    data.append("fabric_brand_44", formData.fabric_brand_44 || "");
+    data.append("fabric_brand_46", formData.fabric_brand_46 || "");
+    data.append("fabric_brand_48", formData.fabric_brand_48 || "");
+    data.append("fabric_brand_50", formData.fabric_brand_50 || "");
 
     try {
       const token = localStorage.getItem("token");
@@ -95,6 +113,15 @@ const AddBrand = () => {
           fabric_brand_brands: "",
           fabric_brand_images: "",
           fabric_brand_short: "",
+          fabric_brand_36: "",
+          fabric_brand_38: "",
+          fabric_brand_39: "",
+          fabric_brand_40: "",
+          fabric_brand_42: "",
+          fabric_brand_44: "",
+          fabric_brand_46: "",
+          fabric_brand_48: "",
+          fabric_brand_50: "",
         });
         setSelectedFile(null);
         await queryClient.invalidateQueries(["brand"]);
@@ -138,7 +165,7 @@ const AddBrand = () => {
         ) : null}
       </DialogTrigger>
 
-      <DialogContent className="sm:max-w-md bg-white border border-stone-200 rounded-2xl shadow-xl p-6">
+      <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto bg-white border border-stone-200 rounded-2xl shadow-xl p-6">
         <DialogHeader>
           <DialogTitle className="font-heading text-xl font-bold text-stone-800">
             Create New Brand
@@ -149,37 +176,39 @@ const AddBrand = () => {
         </DialogHeader>
 
         <div className="grid gap-4 py-3">
-          {/* Brand Name */}
-          <div className="grid gap-1.5">
-            <Label htmlFor="fabric_brand_brands" className="text-xs font-semibold text-stone-700">
-              Brand Name <span className="text-red-500">*</span>
-            </Label>
-            <Input
-              id="fabric_brand_brands"
-              name="fabric_brand_brands"
-              value={formData.fabric_brand_brands}
-              onChange={handleInputChange}
-              placeholder="Enter Brand Name"
-              className="bg-white border-stone-200 focus:border-[#A27B5C] focus:ring-[#A27B5C]/20 rounded-xl text-stone-800"
-              required
-            />
-          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Brand Name */}
+            <div className="grid gap-1.5">
+              <Label htmlFor="fabric_brand_brands" className="text-xs font-semibold text-stone-700">
+                Brand Name <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="fabric_brand_brands"
+                name="fabric_brand_brands"
+                value={formData.fabric_brand_brands}
+                onChange={handleInputChange}
+                placeholder="Enter Brand Name"
+                className="bg-white border-stone-200 focus:border-[#A27B5C] focus:ring-[#A27B5C]/20 rounded-xl text-stone-800"
+                required
+              />
+            </div>
 
-          {/* Brand Short Code */}
-          <div className="grid gap-1.5">
-            <Label htmlFor="fabric_brand_short" className="text-xs font-semibold text-stone-700">
-              Short Code <span className="text-red-500">*</span>
-            </Label>
-            <Input
-              id="fabric_brand_short"
-              name="fabric_brand_short"
-              value={formData.fabric_brand_short}
-              onChange={handleInputChange}
-              placeholder="Ex: AD"
-              maxLength={2}
-              className="bg-white border-stone-200 focus:border-[#A27B5C] focus:ring-[#A27B5C]/20 rounded-xl text-stone-800 uppercase"
-              required
-            />
+            {/* Brand Short Code */}
+            <div className="grid gap-1.5">
+              <Label htmlFor="fabric_brand_short" className="text-xs font-semibold text-stone-700">
+                Short Code <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="fabric_brand_short"
+                name="fabric_brand_short"
+                value={formData.fabric_brand_short}
+                onChange={handleInputChange}
+                placeholder="Ex: AD"
+                maxLength={2}
+                className="bg-white border-stone-200 focus:border-[#A27B5C] focus:ring-[#A27B5C]/20 rounded-xl text-stone-800 uppercase"
+                required
+              />
+            </div>
           </div>
 
           {/* File Upload */}
@@ -213,13 +242,50 @@ const AddBrand = () => {
               </div>
             )}
           </div>
+
+          {/* Size Rates / Specifications */}
+          <div className="space-y-2 pt-2 border-t border-stone-200">
+            <Label className="text-xs font-bold text-stone-800 uppercase tracking-wider">
+              Size Specifications
+            </Label>
+            <div className="grid grid-cols-3 gap-2.5 bg-[#FAF8F5] p-3 rounded-xl border border-[#E6DEC9]">
+              {[
+                { name: "fabric_brand_36", label: "Size 36" },
+                { name: "fabric_brand_38", label: "Size 38" },
+                { name: "fabric_brand_39", label: "Size 39" },
+                { name: "fabric_brand_40", label: "Size 40" },
+                { name: "fabric_brand_42", label: "Size 42" },
+                { name: "fabric_brand_44", label: "Size 44" },
+                { name: "fabric_brand_46", label: "Size 46" },
+                { name: "fabric_brand_48", label: "Size 48" },
+                { name: "fabric_brand_50", label: "Size 50" },
+              ].map((sizeItem) => (
+                <div key={sizeItem.name} className="space-y-1">
+                  <Label
+                    htmlFor={sizeItem.name}
+                    className="text-[11px] font-semibold text-stone-700"
+                  >
+                    {sizeItem.label}
+                  </Label>
+                  <Input
+                    id={sizeItem.name}
+                    name={sizeItem.name}
+                    value={formData[sizeItem.name]}
+                    onChange={handleInputChange}
+                    placeholder="0"
+                    className="h-8 text-xs bg-white border-stone-200 focus:border-[#A27B5C] rounded-lg text-stone-800"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0 pt-2">
           <Button
             onClick={handleSubmit}
             disabled={isLoading}
-            className="w-full sm:w-auto bg-[#A27B5C] hover:bg-[#8C6547] text-white shadow-sm rounded-xl font-medium px-5 py-2.5"
+            className="w-full sm:w-auto bg-[#A27B5C] hover:bg-[#8C6547] text-white shadow-sm rounded-xl font-medium px-5 py-2.5 cursor-pointer"
           >
             {isLoading ? (
               <>

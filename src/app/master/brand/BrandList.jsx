@@ -81,16 +81,7 @@ const BrandList = () => {
   const { toast } = useToast();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteWorkOrderId, setDeleteWorkOrderId] = useState(null);
-  const [editingRow, setEditingRow] = useState(null);
-  const [editFormData, setEditFormData] = useState({});
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [isUpdating, setIsUpdating] = useState(false);
   const [previewImage, setPreviewImage] = useState(null);
-
-  const statusOptions = [
-    { value: "Active", label: "Active" },
-    { value: "Inactive", label: "Inactive" },
-  ];
 
   const {
     data: brand = [],
@@ -124,57 +115,17 @@ const BrandList = () => {
       setDeleteConfirmOpen(false);
       toast({
         title: "Success",
-        description: `${response.data.msg}`,
+        description: `${response.data.msg || "Brand deleted successfully"}`,
       });
     },
     onError: (error) => {
       toast({
         title: "Error",
-        description: `${error.response?.data?.message}`,
+        description: `${error.response?.data?.message || "Failed to delete brand"}`,
         variant: "destructive",
       });
     }
   });
-
-  const updateMutation = useMutation({
-    mutationFn: async ({ id, data }) => {
-      const token = localStorage.getItem("token");
-      return await axios({
-        url: `${BASE_URL}/api/update-brand/${id}?_method=PUT`,
-        method: "POST",
-        data,
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-    },
-    onSuccess: (response) => {
-      refetch();
-      setEditingRow(null);
-      setEditFormData({});
-      setSelectedFile(null);
-      toast({
-        title: "Success",
-        description: `${response.data.msg}`,
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: "Error",
-        description: error.response?.data?.message || "Failed to update brand",
-        variant: "destructive",
-      });
-    },
-  });
-
-  // const confirmDelete = (e) => {
-  //   e.preventDefault();
-  //   e.stopPropagation()
-  //   if (deleteWorkOrderId) {
-  //     deleteMutation.mutate(deleteWorkOrderId);
-  //     setDeleteWorkOrderId(null);
-  //   }
-  // };
 
   const confirmDelete = (e) => {
     e.preventDefault();
@@ -182,74 +133,6 @@ const BrandList = () => {
     if (deleteWorkOrderId && !deleteMutation.isPending) {
       deleteMutation.mutate(deleteWorkOrderId);
     }
-  };
-
-  const validateOnlyText = (inputtxt) => {
-    var re = /^[A-Za-z ]+$/;
-    if (inputtxt === "" || re.test(inputtxt)) {
-      return true;
-    } else {
-      return false;
-    }
-  };
-
-  const handleEditClick = (row) => {
-    setEditingRow(row.original.id);
-    setEditFormData({
-      fabric_brand_brands: row.original.fabric_brand_brands,
-      fabric_brand_status: row.original.fabric_brand_status,
-      fabric_brand_images: row.original.fabric_brand_images,
-    });
-    setSelectedFile(null);
-  };
-
-  const handleCancelEdit = () => {
-  
-  if (selectedFile) {
-    URL.revokeObjectURL(URL.createObjectURL(selectedFile));
-  }
-  setEditingRow(null);
-  setEditFormData({});
-  setSelectedFile(null);
-};
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    
-    if (name === "fabric_brand_brands") {
-      if (validateOnlyText(value)) {
-        setEditFormData({
-          ...editFormData,
-          [name]: value,
-        });
-      }
-    } else {
-      setEditFormData({
-        ...editFormData,
-        [name]: value,
-      });
-    }
-  };
-
-  const handleSelectChange = (value) => {
-    setEditFormData({
-      ...editFormData,
-      fabric_brand_status: value,
-    });
-  };
-
-  const handleFileChange = (e) => {
-    setSelectedFile(e.target.files[0]);
-  };
-
-  const handleUpdateSubmit = (id) => {
-    const data = new FormData();
-    data.append("fabric_brand_brands", editFormData.fabric_brand_brands);
-    data.append("fabric_brand_status", editFormData.fabric_brand_status);
-    if (selectedFile) {
-      data.append("fabric_brand_images", selectedFile);
-    }
-
-    updateMutation.mutate({ id, data });
   };
 
   // State for table management
@@ -266,63 +149,10 @@ const BrandList = () => {
       id: "Images",
       header: "Images",
       cell: ({ row }) => {
-        const isEditing = editingRow == row.original.id;
         const brandImage = row.original.fabric_brand_images;
         const imageUrl = brandImage
           ? `https://houseofonzone.com/admin/storage/app/public/Brands/${brandImage}`
           : "https://houseofonzone.com/admin/storage/app/public/no_image.jpg";
-
-        if (isEditing) {
-          return (
-            <div className="relative group">
-              <div className="flex items-center space-x-3">
-                <div className="relative">
-                  <img
-                    src={imageUrl}
-                    alt="Current Brand Img"
-                    onError={(e) => {
-                      e.currentTarget.src =
-                        "https://houseofonzone.com/admin/storage/app/public/no_image.jpg";
-                    }}
-                    className="rounded-xl border-2 border-stone-200 shadow-sm"
-                    style={{ width: "50px", height: "50px", objectFit: "cover" }}
-                  />
-                  <span className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 text-[10px] font-semibold text-stone-600 bg-stone-100 border border-stone-200 px-1.5 py-0.5 rounded-full">
-                    Current
-                  </span>
-                </div>
-
-                {selectedFile && (
-                  <div className="relative">
-                    <img
-                      src={URL.createObjectURL(selectedFile)}
-                      alt="Selected Brand Img"
-                      className="rounded-xl border-2 border-[#A27B5C]/50 shadow-sm"
-                      style={{ width: "50px", height: "50px", objectFit: "cover" }}
-                    />
-                    <span className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full">
-                      New
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              <div className="mt-2">
-                <label className="relative cursor-pointer">
-                  <Input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleFileChange}
-                    className="hidden"
-                  />
-                  <div className="flex items-center justify-center px-3 py-1.5 bg-[#A27B5C] hover:bg-[#8C6547] text-white text-xs font-medium rounded-lg transition-all duration-200 shadow-xs">
-                    <span>{selectedFile ? "Change" : "Choose"}</span>
-                  </div>
-                </label>
-              </div>
-            </div>
-          );
-        }
 
         return (
           <div
@@ -357,53 +187,16 @@ const BrandList = () => {
       accessorKey: "fabric_brand_brands",
       id: "Brand",
       header: "Brand",
-      cell: ({ row }) => {
-        const isEditing = editingRow === row.original.id;
-
-        if (isEditing) {
-          return (
-            <Input
-              type="text"
-              value={editFormData.fabric_brand_brands || ""}
-              onChange={handleInputChange}
-              name="fabric_brand_brands"
-              className="w-full bg-white border-stone-200 focus:border-[#A27B5C] rounded-lg text-sm"
-              required
-            />
-          );
-        }
-
-        return <div className="font-medium text-stone-800">{row.getValue("Brand")}</div>;
-      },
+      cell: ({ row }) => (
+        <div className="font-semibold text-stone-800">{row.getValue("Brand")}</div>
+      ),
     },
     {
       accessorKey: "fabric_brand_status",
       id: "Status",
       header: "Status",
       cell: ({ row }) => {
-        const isEditing = editingRow === row.original.id;
         const status = row.getValue("Status");
-
-        if (isEditing) {
-          return (
-            <Select
-              value={editFormData.fabric_brand_status || ""}
-              onValueChange={handleSelectChange}
-            >
-              <SelectTrigger className="w-full bg-white border-stone-200 rounded-lg">
-                <SelectValue placeholder="Select status" />
-              </SelectTrigger>
-              <SelectContent>
-                {statusOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          );
-        }
-
         const statusColors = {
           Active: "bg-emerald-50 text-emerald-700 border-emerald-200",
           Inactive: "bg-stone-100 text-stone-600 border-stone-200",
@@ -425,63 +218,17 @@ const BrandList = () => {
       header: "Action",
       cell: ({ row }) => {
         const brandId = row.original.id;
-        const isEditing = editingRow === brandId;
-
-        if (isEditing) {
-          return (
-            <div className="flex flex-row space-x-1">
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleUpdateSubmit(brandId)}
-                      disabled={updateMutation.isPending}
-                      className="text-green-600 hover:text-green-800"
-                    >
-                      {updateMutation.isPending ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Check className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {updateMutation.isPending ? "Updating..." : "Save Changes"}
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={handleCancelEdit}
-                      disabled={updateMutation.isPending}
-                      className="text-red-600 hover:text-red-800"
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Cancel</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-          );
-        }
 
         return (
-          <div className="flex flex-row">
+          <div className="flex items-center space-x-1">
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => handleEditClick(row)}
+                    className="h-8 w-8 text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded-lg"
+                    onClick={() => navigate(`/master/brand/edit-brand/${brandId}`)}
                   >
                     <Edit className="h-4 w-4" />
                   </Button>
@@ -496,6 +243,7 @@ const BrandList = () => {
                   <Button
                     variant="ghost"
                     size="icon"
+                    className="h-8 w-8 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg"
                     onClick={() => {
                       setDeleteWorkOrderId(brandId);
                       setDeleteConfirmOpen(true);
@@ -565,14 +313,14 @@ const BrandList = () => {
             </h1>
           </div>
 
-          <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="flex items-center gap-3 flex-wrap">
             <div className="relative w-full sm:w-64 flex items-center">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400 pointer-events-none" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400 pointer-events-none" />
               <Input
                 placeholder="Search brand..."
                 value={table.getState().globalFilter || ""}
                 onChange={(event) => table.setGlobalFilter(event.target.value)}
-                className="h-9 pl-9.5 pr-3 text-xs bg-white border-stone-200 focus:border-[#A27B5C] focus:ring-[#A27B5C]/20 rounded-xl text-stone-800 shadow-2xs"
+                className="h-9 pl-8 pr-3 text-xs bg-white border-stone-200 focus:border-[#A27B5C] focus:ring-[#A27B5C]/20 rounded-xl text-stone-800 shadow-2xs"
               />
             </div>
 
