@@ -190,6 +190,7 @@ const BrandList = () => {
         <div className="font-semibold text-stone-800 whitespace-nowrap min-w-[120px]">{row.getValue("Brand")}</div>
       ),
     },
+    /*
     {
       accessorKey: "fabric_brand_36",
       id: "Size 36",
@@ -262,6 +263,7 @@ const BrandList = () => {
         <div className="text-center font-medium text-stone-700 min-w-[65px]">{row.getValue("Size 50") ?? "-"}</div>
       ),
     },
+    */
     {
       accessorKey: "fabric_brand_status",
       id: "Status",

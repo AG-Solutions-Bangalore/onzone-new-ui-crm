@@ -302,7 +302,7 @@ const EditBrand = () => {
               </div>
 
               {/* Size Specifications Section */}
-              <div className="space-y-3 pt-4 border-t border-stone-200/80">
+              {/* <div className="space-y-3 pt-4 border-t border-stone-200/80">
                 <div>
                   <h3 className="text-sm font-bold text-stone-800 uppercase tracking-wider">
                     Size Specifications
@@ -342,7 +342,7 @@ const EditBrand = () => {
                     </div>
                   ))}
                 </div>
-              </div>
+              </div> */}
 
               {/* Buttons */}
               <div className="flex justify-end gap-3 pt-4 border-t border-stone-100">
