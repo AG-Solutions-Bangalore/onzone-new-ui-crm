@@ -121,6 +121,18 @@ const FairOrderFormList = () => {
 
   const columns = [
     {
+      id: "sl_no",
+      header: "Sl. No.",
+      cell: ({ row, table }) => {
+        const { pageIndex, pageSize } = table.getState().pagination;
+        return (
+          <span className="font-semibold text-stone-700 text-xs">
+            {pageIndex * pageSize + row.index + 1}
+          </span>
+        );
+      },
+    },
+    {
       accessorKey: "fair_order_no",
       id: "Order No",
       header: ({ column }) => (
@@ -378,7 +390,9 @@ const FairOrderFormList = () => {
                     <TableHead
                       key={header.id}
                       className={`text-stone-800 font-semibold text-xs uppercase tracking-wider py-3.5 px-4 ${
-                        header.column.id === "Order No"
+                        header.column.id === "sl_no"
+                          ? "w-16 whitespace-nowrap"
+                          : header.column.id === "Order No"
                           ? "w-28 whitespace-nowrap"
                           : header.column.id === "Date"
                           ? "w-32 whitespace-nowrap"
@@ -416,7 +430,9 @@ const FairOrderFormList = () => {
                       <TableCell
                         key={cell.id}
                         className={`py-3 px-4 text-sm text-stone-700 ${
-                          cell.column.id === "Order No"
+                          cell.column.id === "sl_no"
+                            ? "w-16"
+                            : cell.column.id === "Order No"
                             ? "w-28"
                             : cell.column.id === "Date"
                             ? "w-32"

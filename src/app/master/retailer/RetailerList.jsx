@@ -103,16 +103,26 @@ const RetailerList = () => {
   // Define columns for the table
   const columns = [
     {
+      id: "sl_no",
+      header: "Sl. No.",
+      cell: ({ row, table }) => {
+        const { pageIndex, pageSize } = table.getState().pagination;
+        return (
+          <span className="font-semibold text-stone-700 text-xs">
+            {pageIndex * pageSize + row.index + 1}
+          </span>
+        );
+      },
+    },
+    {
       accessorKey: "customer_name",
       id: "Retailer",
       header: "Retailer Name",
-      cell: ({ row }) => <div className="font-medium text-stone-800">{row.getValue("Retailer")}</div>,
-    },
-    {
-      accessorKey: "company_code",
-      id: "Code",
-      header: "Code",
-      cell: ({ row }) => <div className="font-mono text-xs text-stone-600 bg-stone-100 px-2 py-0.5 rounded w-fit">{row.original.company_code || "-"}</div>,
+      cell: ({ row }) => (
+        <div className="font-medium text-stone-800">
+          {row.getValue("Retailer") || "-"}
+        </div>
+      ),
     },
     {
       accessorKey: "customer_type",
@@ -120,7 +130,7 @@ const RetailerList = () => {
       header: "Type",
       cell: ({ row }) => (
         <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-[#A27B5C]/10 text-[#8C6547]">
-          {row.getValue("Type")}
+          {row.getValue("Type") || "-"}
         </span>
       ),
     },
@@ -128,13 +138,33 @@ const RetailerList = () => {
       accessorKey: "customer_mobile",
       id: "Mobile",
       header: "Mobile",
-      cell: ({ row }) => <div className="text-stone-700">{row.getValue("Mobile") || "-"}</div>,
+      cell: ({ row }) => (
+        <div className="text-stone-700">{row.getValue("Mobile") || "-"}</div>
+      ),
     },
     {
       accessorKey: "customer_email",
       id: "Email",
       header: "Email",
-      cell: ({ row }) => <div className="text-stone-600 text-xs">{row.getValue("Email") || "-"}</div>,
+      cell: ({ row }) => (
+        <div className="text-stone-600 text-xs">{row.getValue("Email") || "-"}</div>
+      ),
+    },
+    {
+      accessorKey: "customer_group",
+      id: "Group",
+      header: "Group",
+      cell: ({ row }) => (
+        <div className="text-stone-700 text-xs">{row.getValue("Group") || "-"}</div>
+      ),
+    },
+    {
+      accessorKey: "customer_referred_by",
+      id: "Referred By",
+      header: "Referred By",
+      cell: ({ row }) => (
+        <div className="text-stone-700 text-xs">{row.getValue("Referred By") || "-"}</div>
+      ),
     },
     {
       accessorKey: "customer_status",
@@ -154,7 +184,7 @@ const RetailerList = () => {
               statusColors[status] || "bg-stone-100 text-stone-600 border-stone-200"
             }`}
           >
-            {status}
+            {status || "-"}
           </span>
         );
       },
@@ -163,7 +193,7 @@ const RetailerList = () => {
       id: "actions",
       header: "Action",
       cell: ({ row }) => {
-        const workOrderId = row.original.id;
+        const customerId = row.original.id;
 
         return (
           <div className="flex items-center space-x-1">
@@ -175,7 +205,7 @@ const RetailerList = () => {
                     size="icon"
                     className="h-8 w-8 text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded-lg"
                     onClick={() =>
-                      navigate(`/master/retailer/edit-retailer/${workOrderId}`)
+                      navigate(`/master/retailer/edit-retailer/${customerId}`)
                     }
                   >
                     <Edit className="h-4 w-4" />
