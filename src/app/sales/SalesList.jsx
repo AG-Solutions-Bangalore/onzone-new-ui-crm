@@ -97,9 +97,21 @@ const SalesList = () => {
   // Define columns for the table
   const columns = [
     {
+      id: "sl_no",
+      header: "Sl. No.",
+      cell: ({ row, table }) => {
+        const { pageIndex, pageSize } = table.getState().pagination;
+        return (
+          <span className="font-semibold text-stone-700 text-xs">
+            {pageIndex * pageSize + row.index + 1}
+          </span>
+        );
+      },
+    },
+    {
       accessorKey: "work_order_sa_no",
       id: "Work Order Sales No",
-      header: "Sl.No",
+      header: "Sales No",
       cell: ({ row }) => (
         <span className="font-semibold text-stone-800">
           {row.getValue("Work Order Sales No")}

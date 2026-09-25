@@ -134,6 +134,18 @@ const OrderFormList = () => {
 
   const columns = [
     {
+      id: "sl_no",
+      header: "Sl. No.",
+      cell: ({ row, table }) => {
+        const { pageIndex, pageSize } = table.getState().pagination;
+        return (
+          <span className="font-semibold text-stone-700 text-xs">
+            {pageIndex * pageSize + row.index + 1}
+          </span>
+        );
+      },
+    },
+    {
       accessorKey: "order_no",
       id: "Order No",
       header: "Order No",

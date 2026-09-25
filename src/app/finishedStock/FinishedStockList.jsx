@@ -90,6 +90,18 @@ const FinishedStockList = () => {
   // Define columns for the table
   const columns = [
     {
+      id: "sl_no",
+      header: "Sl. No.",
+      cell: ({ row, table }) => {
+        const { pageIndex, pageSize } = table.getState().pagination;
+        return (
+          <span className="font-semibold text-stone-700 text-xs">
+            {pageIndex * pageSize + row.index + 1}
+          </span>
+        );
+      },
+    },
+    {
       accessorKey: "work_order_rc_sub_barcode",
       id: "T Code",
       header: "T Code",
