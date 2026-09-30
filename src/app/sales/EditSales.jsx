@@ -210,7 +210,7 @@ const EditSales = () => {
     setDeleteDialog({
       isOpen: true,
       data: { index, barcode, dbId },
-      message: dbId 
+      message: dbId
         ? `Are you sure you want to delete barcode "${barcode}" from the database?`
         : `Are you sure you want to remove barcode "${barcode}"?`
     });
@@ -225,7 +225,7 @@ const EditSales = () => {
       const success = await deleteBarcodeFromDB(dbId);
       if (!success) return;
     }
-    
+
     // Remove from local state
     const newUsers = [...users];
     newUsers.splice(index, 1);
@@ -243,7 +243,7 @@ const EditSales = () => {
   // Delete individual barcode from database
   const deleteBarcodeFromDB = async (barcodeId) => {
     if (!barcodeId) return true;
-    
+
     try {
       const token = localStorage.getItem("token");
       await axios.delete(
@@ -438,9 +438,8 @@ const EditSales = () => {
   if (isError) {
     return (
       <ErrorComponent
-        message={`Error Fetching Work Order Sales Data: ${
-          error?.message || "Unknown error"
-        }`}
+        message={`Error Fetching Work Order Sales Data: ${error?.message || "Unknown error"
+          }`}
         refetch={refetch}
       />
     );
@@ -481,7 +480,7 @@ const EditSales = () => {
                 </div>
 
                 <div className="space-y-1">
-                  <Label htmlFor="work_order_sa_date">Sales Date</Label>
+                  <Label htmlFor="work_order_sa_date">Packing Date</Label>
                   <Input
                     id="work_order_sa_date"
                     type="date"
@@ -683,7 +682,7 @@ const EditSales = () => {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction 
+            <AlertDialogAction
               onClick={handleConfirmedDelete}
               className="bg-red-600 hover:bg-red-700"
             >
@@ -731,11 +730,10 @@ const EditSales = () => {
                 </div>
 
                 <div className="flex flex-col items-center justify-center">
-                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
-                    confirmUpdateDialog.addedCount >= 0
+                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${confirmUpdateDialog.addedCount >= 0
                       ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
                       : "bg-amber-100 text-amber-700 border border-amber-200"
-                  }`}>
+                    }`}>
                     {confirmUpdateDialog.addedCount >= 0 ? `+${confirmUpdateDialog.addedCount} Added` : `${confirmUpdateDialog.addedCount} Removed`}
                   </span>
                   <ArrowRight className="h-4 w-4 text-stone-400 mt-1" />

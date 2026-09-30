@@ -21,7 +21,6 @@ import {
   ArrowLeft,
   RotateCcw,
   Loader2,
-  CheckCheck,
   Search,
   Package,
   Layers,
@@ -38,14 +37,14 @@ const BoxBarcodeScannerModal = ({
   expectedItems = [], // Array of { barcode, size, amount, quantity }
   initialBarcodes = [], // Array of barcode strings currently assigned
   originalBarcodes = [], // Array of original barcode strings from packing list
+  savedScannedCounts = null, // Previously saved scanned counts if box was verified
   onSave,
   isSaving = false,
 }) => {
-  const [activeStep, setActiveStep] = useState(1); // 1 = Scanning, 2 = Comparison & Double-Check
+  const [activeStep, setActiveStep] = useState(1); // 1 = Scanning, 2 = Comparison
   const [scanningActive, setScanningActive] = useState(true);
   const [inputValue, setInputValue] = useState("");
   const [scannedCounts, setScannedCounts] = useState({});
-  const [doubleCheckedMissing, setDoubleCheckedMissing] = useState({});
   const [scanFeedback, setScanFeedback] = useState(null);
   const [comparisonFilter, setComparisonFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -62,16 +61,19 @@ const BoxBarcodeScannerModal = ({
       setScanFeedback(null);
       setComparisonFilter("all");
       setSearchQuery("");
-      setDoubleCheckedMissing({});
 
-      // Start FRESH with 0 scanned barcodes so the operator scans physical box items one by one!
-      setScannedCounts({});
+      // If this box was previously scanned/verified, restore the scanned counts so progress is preserved!
+      if (savedScannedCounts && Object.keys(savedScannedCounts).length > 0) {
+        setScannedCounts({ ...savedScannedCounts });
+      } else {
+        setScannedCounts({});
+      }
 
       setTimeout(() => {
         barcodeInputRef.current?.focus();
       }, 100);
     }
-  }, [open, boxNumber]);
+  }, [open, boxNumber, savedScannedCounts]);
 
   // Map of expected items for this box
   const expectedItemsMap = useMemo(() => {
@@ -157,7 +159,6 @@ const BoxBarcodeScannerModal = ({
         scannedQty,
         status,
         diff,
-        isDoubleChecked: Boolean(doubleCheckedMissing[barcode]),
       };
     });
 
@@ -169,7 +170,7 @@ const BoxBarcodeScannerModal = ({
       totalMissing,
       totalExtra,
     };
-  }, [expectedItemsMap, scannedCounts, doubleCheckedMissing]);
+  }, [expectedItemsMap, scannedCounts]);
 
   // Audio / Visual Feedback on Scan
   const showFeedback = (type, message, barcode) => {
@@ -306,35 +307,13 @@ const BoxBarcodeScannerModal = ({
       }
     });
     setScannedCounts(counts);
-    setDoubleCheckedMissing({});
     showFeedback("info", "Reset barcodes to original packing list");
   };
 
   // Clear all scanned
   const handleClearAll = () => {
     setScannedCounts({});
-    setDoubleCheckedMissing({});
     showFeedback("info", "Cleared all scanned barcodes");
-  };
-
-  // Toggle Double-Check for a missing item
-  const toggleDoubleCheckMissing = (barcode) => {
-    setDoubleCheckedMissing((prev) => ({
-      ...prev,
-      [barcode]: !prev[barcode],
-    }));
-  };
-
-  // Double check all missing
-  const handleDoubleCheckAllMissing = () => {
-    const newChecked = { ...doubleCheckedMissing };
-    comparisonData.items
-      .filter((it) => it.status === "missing")
-      .forEach((it) => {
-        newChecked[it.barcode] = true;
-      });
-    setDoubleCheckedMissing(newChecked);
-    showFeedback("success", "Marked all missing items as Double-Checked");
   };
 
   // Build final array of barcodes and save
@@ -345,7 +324,15 @@ const BoxBarcodeScannerModal = ({
         finalBarcodeList.push(barcode);
       }
     });
-    onSave(finalBarcodeList);
+    onSave(finalBarcodeList, {
+      expected: comparisonData.totalExpected,
+      matched: comparisonData.totalMatched,
+      missing: comparisonData.totalMissing,
+      extra: comparisonData.totalExtra,
+      total: comparisonData.totalScanned,
+      scannedCounts: { ...scannedCounts },
+      items: comparisonData.items,
+    });
   };
 
   // Filtered comparison items
@@ -376,37 +363,44 @@ const BoxBarcodeScannerModal = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl max-h-[92vh] h-[92vh] flex flex-col p-5 overflow-hidden bg-slate-50/50">
+      <DialogContent className="max-w-5xl max-h-[92vh] h-[92vh] flex flex-col p-6 overflow-hidden bg-[#FDFBF7] border border-stone-200/90 rounded-2xl shadow-2xl">
         {/* Header with Title & Step Navigation */}
-        <DialogHeader className="shrink-0 pb-2 border-b">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <div>
-              <DialogTitle className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                <Package className="h-5 w-5 text-blue-600" />
-                <span>Barcode Verification — {formattedBoxTitle || `Box ${boxNumber}`}</span>
-              </DialogTitle>
-              <p className="text-xs text-gray-500 mt-0.5">
-                Scan all barcodes, verify quantities, and double check missing pieces before saving.
-              </p>
+        <DialogHeader className="shrink-0 pb-3 border-b border-stone-200/80">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-[#F5F2EB] border border-stone-200/80 flex items-center justify-center text-[#543D2B] shadow-2xs">
+                <Package className="h-5 w-5" />
+              </div>
+              <div>
+                <DialogTitle className="text-base sm:text-lg font-bold text-stone-900 flex items-center gap-2">
+                  <span>Barcode Verification</span>
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-[#F5F2EB] text-[#543D2B] border border-stone-200/80">
+                    {formattedBoxTitle || `Box ${boxNumber}`}
+                  </span>
+                </DialogTitle>
+                <p className="text-xs text-stone-500 mt-0.5">
+                  Scan all barcodes and verify quantities before saving.
+                </p>
+              </div>
             </div>
 
             {/* Step Switcher Tabs */}
-            <div className="flex items-center bg-gray-200/80 p-1 rounded-lg">
+            <div className="flex items-center bg-[#F5F2EB] p-1 rounded-xl border border-stone-200/80">
               <button
                 type="button"
                 onClick={() => {
                   setActiveStep(1);
                   setTimeout(() => barcodeInputRef.current?.focus(), 100);
                 }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   activeStep === 1
-                    ? "bg-white text-blue-700 shadow-sm"
-                    : "text-gray-600 hover:text-gray-900"
+                    ? "bg-white text-stone-900 shadow-xs border border-stone-200/60"
+                    : "text-stone-600 hover:text-stone-900"
                 }`}
               >
-                <Scan className="h-3.5 w-3.5" />
+                <Scan className="h-3.5 w-3.5 text-[#A27B5C]" />
                 <span>1. Scan Barcodes</span>
-                <span className="bg-blue-100 text-blue-800 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
+                <span className="bg-[#543D2B] text-white text-[10px] px-1.5 py-0.2 rounded-full font-bold font-mono">
                   {comparisonData.totalScanned}
                 </span>
               </button>
@@ -414,20 +408,20 @@ const BoxBarcodeScannerModal = ({
               <button
                 type="button"
                 onClick={() => setActiveStep(2)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   activeStep === 2
-                    ? "bg-white text-blue-700 shadow-sm"
-                    : "text-gray-600 hover:text-gray-900"
+                    ? "bg-white text-stone-900 shadow-xs border border-stone-200/60"
+                    : "text-stone-600 hover:text-stone-900"
                 }`}
               >
-                <Layers className="h-3.5 w-3.5" />
+                <Layers className="h-3.5 w-3.5 text-[#A27B5C]" />
                 <span>2. Compare & Verify</span>
                 {comparisonData.totalMissing > 0 ? (
-                  <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-bold animate-pulse">
+                  <span className="bg-rose-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-bold animate-pulse font-mono">
                     {comparisonData.totalMissing} Missing
                   </span>
                 ) : (
-                  <span className="bg-green-100 text-green-800 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
+                  <span className="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 py-0.2 rounded-full font-bold font-mono">
                     ✓ Complete
                   </span>
                 )}
@@ -441,21 +435,21 @@ const BoxBarcodeScannerModal = ({
         {/* ========================================================================= */}
         {activeStep === 1 && (
           <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-5 min-h-0 overflow-hidden pt-2">
-            {/* LEFT SIDE: Barcode Scanner Widget (Matching Attached Screenshot) */}
-            <div className="md:col-span-5 flex flex-col min-h-0 h-full bg-white border border-gray-200 rounded-xl p-4 shadow-xs overflow-y-auto">
+            {/* LEFT SIDE: Barcode Scanner Widget */}
+            <div className="md:col-span-5 flex flex-col min-h-0 h-full bg-white border border-stone-200/80 rounded-2xl p-4 shadow-2xs overflow-y-auto">
               {/* Scanner Top Bar */}
               <div className="flex items-center justify-between mb-3 shrink-0">
-                <h3 className="text-sm font-bold text-gray-900">Barcode Scanner</h3>
-                <div className="flex items-center gap-2">
+                <h3 className="text-xs font-bold text-stone-900 uppercase tracking-wider">Barcode Scanner</h3>
+                <div className="flex items-center gap-1.5">
                   <span
-                    className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold transition-colors ${
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors ${
                       scanningActive
-                        ? "bg-emerald-600 text-white shadow-xs"
-                        : "bg-gray-200 text-gray-700"
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200/80"
+                        : "bg-stone-100 text-stone-600 border border-stone-200"
                     }`}
                   >
-                    <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
-                    {scanningActive ? "• Active" : "Paused"}
+                    <span className={`h-1.5 w-1.5 rounded-full ${scanningActive ? "bg-emerald-600 animate-pulse" : "bg-stone-400"}`} />
+                    {scanningActive ? "Active" : "Paused"}
                   </span>
                   <Button
                     type="button"
@@ -467,11 +461,11 @@ const BoxBarcodeScannerModal = ({
                         setTimeout(() => barcodeInputRef.current?.focus(), 50);
                       }
                     }}
-                    className="h-7 w-7 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-md"
+                    className="h-7 w-7 text-stone-400 hover:text-stone-800 hover:bg-[#F5F2EB] rounded-lg"
                     title={scanningActive ? "Pause Scanner" : "Activate Scanner"}
                   >
                     {scanningActive ? (
-                      <X className="h-4 w-4 text-red-600" />
+                      <X className="h-4 w-4 text-stone-500 hover:text-red-600" />
                     ) : (
                       <Scan className="h-4 w-4 text-emerald-600" />
                     )}
@@ -479,21 +473,21 @@ const BoxBarcodeScannerModal = ({
                 </div>
               </div>
 
-              {/* Exact Red/Pink Styled Scanner Container from Attached Image */}
-              <div className="bg-red-50/80 border border-red-200 rounded-xl p-3.5 mb-3.5 shrink-0">
-                <Label className="text-xs font-semibold text-gray-800 block mb-1.5">
-                  Barcode Scanner
+              {/* Polished Scanner Container */}
+              <div className="bg-[#FAF8F5] border border-stone-200/90 rounded-xl p-3.5 mb-3.5 shrink-0 transition-all focus-within:border-[#A27B5C] focus-within:ring-2 focus-within:ring-[#A27B5C]/15">
+                <Label className="text-xs font-bold text-stone-800 block mb-1.5">
+                  Scan Barcode
                 </Label>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-2">
                   <div className="relative flex-1">
                     <Input
                       ref={barcodeInputRef}
                       value={inputValue}
                       onChange={(e) => setInputValue(e.target.value.toUpperCase())}
                       onKeyDown={handleInputKeyDown}
-                      placeholder="Scan or enter barcode..."
+                      placeholder="SCAN OR ENTER BARCODE..."
                       disabled={!scanningActive}
-                      className="bg-white border-gray-300 uppercase font-mono text-xs h-9 pr-3 focus-visible:ring-red-700"
+                      className="bg-white border-stone-200 uppercase font-mono text-xs h-9.5 pr-3 focus-visible:ring-0 focus-visible:border-[#A27B5C] rounded-lg text-stone-900 tracking-wider font-semibold placeholder:text-stone-400"
                       autoFocus
                     />
                   </div>
@@ -507,30 +501,35 @@ const BoxBarcodeScannerModal = ({
                       }
                     }}
                     disabled={!scanningActive}
-                    className={`h-9 px-3 shrink-0 ${ButtonConfig.backgroundColor} ${ButtonConfig.hoverBackgroundColor} text-white shadow-xs transition-colors cursor-pointer`}
+                    className="h-9.5 px-3.5 shrink-0 bg-[#543D2B] hover:bg-[#412E20] text-white rounded-lg shadow-xs transition-colors cursor-pointer"
                     title="Scan / Submit Barcode"
                   >
                     <Scan className="h-4 w-4" />
                   </Button>
                 </div>
-                <p className="text-[11px] text-gray-500 mt-1.5">
-                  {scanningActive
-                    ? "Scan barcode or type and press Enter"
-                    : "Activate scanning to add barcodes"}
-                </p>
+                <div className="flex items-center justify-between text-[11px] text-stone-500 mt-2">
+                  <span>
+                    {scanningActive
+                      ? "Scan barcode or type & press Enter"
+                      : "Activate scanning to continue"}
+                  </span>
+                  <span className="font-mono text-[10px] text-stone-400 bg-stone-100 px-1.5 py-0.2 rounded border border-stone-200">
+                    ↵ Enter
+                  </span>
+                </div>
               </div>
 
               {/* Real-time Scan Feedback Banner */}
               {scanFeedback && (
                 <div
-                  className={`p-3 rounded-lg text-xs font-medium mb-3 shrink-0 flex items-start gap-2 animate-in fade-in duration-200 ${
+                  className={`p-3 rounded-xl text-xs font-medium mb-3 shrink-0 flex items-start gap-2.5 animate-in fade-in duration-200 border ${
                     scanFeedback.type === "success"
-                      ? "bg-emerald-50 border border-emerald-300 text-emerald-900"
+                      ? "bg-emerald-50/80 border-emerald-200 text-emerald-900"
                       : scanFeedback.type === "warning"
-                      ? "bg-amber-50 border border-amber-300 text-amber-900"
+                      ? "bg-amber-50/80 border-amber-200 text-amber-900"
                       : scanFeedback.type === "error"
-                      ? "bg-rose-50 border border-rose-300 text-rose-900"
-                      : "bg-blue-50 border border-blue-300 text-blue-900"
+                      ? "bg-rose-50/80 border-rose-200 text-rose-900"
+                      : "bg-[#F5F2EB] border-stone-200 text-stone-800"
                   }`}
                 >
                   {scanFeedback.type === "success" ? (
@@ -538,28 +537,28 @@ const BoxBarcodeScannerModal = ({
                   ) : scanFeedback.type === "warning" ? (
                     <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
                   ) : (
-                    <Sparkles className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
+                    <Sparkles className="h-4 w-4 text-[#A27B5C] shrink-0 mt-0.5" />
                   )}
                   <div className="flex-1 leading-relaxed">{scanFeedback.message}</div>
                 </div>
               )}
 
               {/* Box Progress & Live Summary Card */}
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 mb-4 shrink-0">
-                <div className="flex items-center justify-between text-xs font-semibold text-gray-700 mb-2">
+              <div className="bg-[#FAF8F5] border border-stone-200/80 rounded-xl p-3.5 mb-2 shrink-0">
+                <div className="flex items-center justify-between text-xs font-bold text-stone-700 mb-2">
                   <span>Box Scanning Progress</span>
-                  <span className="font-bold text-gray-900">
+                  <span className="font-mono text-stone-900">
                     {comparisonData.totalScanned} / {comparisonData.totalExpected} Pcs
                   </span>
                 </div>
 
                 {/* Progress Bar */}
-                <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden mb-3">
+                <div className="w-full bg-stone-200 rounded-full h-2 overflow-hidden mb-3">
                   <div
                     className={`h-full transition-all duration-300 ${
                       comparisonData.totalMissing === 0 && comparisonData.totalExpected > 0
                         ? "bg-emerald-600"
-                        : "bg-blue-600"
+                        : "bg-[#543D2B]"
                     }`}
                     style={{
                       width: `${
@@ -578,57 +577,38 @@ const BoxBarcodeScannerModal = ({
 
                 {/* Micro Stats Grid */}
                 <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                  <div className="bg-white border rounded-lg p-2">
-                    <span className="text-[10px] text-gray-500 block">Expected</span>
-                    <span className="font-bold text-gray-800 text-sm">
+                  <div className="bg-white border border-stone-200 rounded-lg p-2 shadow-2xs">
+                    <span className="text-[10px] text-stone-500 font-semibold block uppercase">Expected</span>
+                    <span className="font-bold text-stone-800 text-sm font-mono">
                       {comparisonData.totalExpected}
                     </span>
                   </div>
-                  <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-2 text-emerald-800">
-                    <span className="text-[10px] text-emerald-600 block">Matched</span>
-                    <span className="font-bold text-sm">{comparisonData.totalMatched}</span>
+                  <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-lg p-2 text-emerald-800 shadow-2xs">
+                    <span className="text-[10px] text-emerald-700 font-semibold block uppercase">Matched</span>
+                    <span className="font-bold text-sm font-mono">{comparisonData.totalMatched}</span>
                   </div>
                   <div
-                    className={`border rounded-lg p-2 ${
+                    className={`border rounded-lg p-2 shadow-2xs ${
                       comparisonData.totalMissing > 0
-                        ? "bg-rose-50 border-rose-200 text-rose-800 font-bold animate-pulse"
-                        : "bg-white text-gray-400"
+                        ? "bg-rose-50/70 border-rose-200 text-rose-800 font-bold"
+                        : "bg-white border-stone-200 text-stone-400"
                     }`}
                   >
-                    <span className="text-[10px] text-rose-600 block">Missing</span>
-                    <span className="font-bold text-sm">{comparisonData.totalMissing}</span>
+                    <span className={`text-[10px] font-semibold block uppercase ${comparisonData.totalMissing > 0 ? "text-rose-600" : "text-stone-400"}`}>
+                      Missing
+                    </span>
+                    <span className="font-bold text-sm font-mono">{comparisonData.totalMissing}</span>
                   </div>
-                </div>
-              </div>
-
-              {/* Bottom Quick Switch Action */}
-              <div className="mt-auto pt-3 border-t flex flex-col gap-2 shrink-0">
-                <Button
-                  type="button"
-                  onClick={() => setActiveStep(2)}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-9 flex items-center justify-center gap-2 cursor-pointer shadow-xs"
-                >
-                  <span>Compare & Verify (Step 2)</span>
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </Button>
-                <div className="flex items-center justify-end text-[11px] text-gray-500 px-1">
-                  <button
-                    type="button"
-                    onClick={handleClearAll}
-                    className="text-rose-600 hover:text-rose-800 underline cursor-pointer"
-                  >
-                    Clear All Scanned (0 pcs)
-                  </button>
                 </div>
               </div>
             </div>
 
             {/* RIGHT SIDE: Real-Time Scanned List with Plus/Minus Controls */}
-            <div className="md:col-span-7 flex flex-col min-h-0 h-full bg-white border border-gray-200 rounded-xl p-4 shadow-xs overflow-hidden">
+            <div className="md:col-span-7 flex flex-col min-h-0 h-full bg-white border border-stone-200/80 rounded-2xl p-4 shadow-2xs overflow-hidden">
               <div className="flex items-center justify-between mb-3 shrink-0 flex-wrap gap-2">
                 <div>
-                  <h3 className="text-sm font-bold text-gray-900">Scanned Items</h3>
-                  <p className="text-[11px] text-gray-500">
+                  <h3 className="text-xs font-bold text-stone-900 uppercase tracking-wider">Scanned Items</h3>
+                  <p className="text-[11px] text-stone-500">
                     If item has multiple quantities, scan again or use the plus (+) button directly
                   </p>
                 </div>
@@ -638,19 +618,19 @@ const BoxBarcodeScannerModal = ({
                     variant="outline"
                     size="sm"
                     onClick={handleClearAll}
-                    className="h-7 text-[11px] px-2.5 text-rose-600 hover:bg-rose-50 border-rose-200 cursor-pointer"
+                    className="h-7 text-[11px] px-2.5 text-stone-500 hover:text-rose-600 hover:bg-rose-50 border-stone-200 rounded-lg cursor-pointer"
                     title="Clear all scanned items (0 pcs)"
                   >
                     Clear All
                   </Button>
-                  <span className="bg-blue-100 text-blue-800 text-xs font-bold px-2.5 py-1 rounded-full">
+                  <span className="bg-[#F5F2EB] text-[#543D2B] border border-stone-200/80 text-xs font-bold px-2.5 py-1 rounded-lg font-mono">
                     {comparisonData.totalScanned} Total Pcs
                   </span>
                 </div>
               </div>
 
               {/* Scanned Items Scrollable List */}
-              <div className="flex-1 overflow-y-auto min-h-0 pr-1 space-y-2.5">
+              <div className="flex-1 overflow-y-auto min-h-0 pr-1 space-y-2">
                 {Object.keys(scannedCounts).length > 0 ? (
                   Object.entries(scannedCounts).map(([barcode, count], idx) => {
                     const meta = getItemMeta(barcode);
@@ -662,140 +642,115 @@ const BoxBarcodeScannerModal = ({
                     return (
                       <div
                         key={barcode}
-                        className={`p-3 rounded-xl border transition-all ${
+                        className={`py-2 px-3 rounded-xl border transition-all flex items-center justify-between gap-2 ${
                           isMatched
-                            ? "bg-emerald-50/60 border-emerald-300"
+                            ? "bg-emerald-50/40 border-emerald-200/80 hover:border-emerald-300"
                             : isPartial
-                            ? "bg-amber-50/60 border-amber-300"
-                            : "bg-purple-50/60 border-purple-300"
+                            ? "bg-amber-50/30 border-amber-200/80 hover:border-amber-300"
+                            : "bg-[#FAF8F5] border-stone-200/90 hover:border-stone-300"
                         }`}
                       >
-                        <div className="flex items-center justify-between flex-wrap gap-2">
-                          {/* Item Details: Barcode, Size, Amount, and Actual Quantity */}
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-bold text-gray-500 font-mono">
-                                #{idx + 1}
-                              </span>
-                              <span className="font-mono text-sm font-bold text-gray-900 tracking-wide">
-                                {barcode}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2 flex-wrap text-xs text-gray-600 mt-1">
-                              <span className="bg-white/90 px-2 py-0.5 rounded border border-gray-200 font-medium">
-                                Size: <strong className="text-gray-900">{meta.size}</strong>
-                              </span>
-                              <span className="bg-white/90 px-2 py-0.5 rounded border border-gray-200 font-medium">
-                                MRP: <strong className="text-gray-900">₹{meta.amount}</strong>
-                              </span>
-                              <span
-                                className={`px-2 py-0.5 rounded border font-semibold ${
-                                  expected > 0
-                                    ? "bg-blue-50 border-blue-200 text-blue-900"
-                                    : "bg-gray-100 border-gray-300 text-gray-700"
-                                }`}
-                              >
-                                Actual Qty: <strong className="text-blue-950 font-bold">{expected}</strong>
-                              </span>
-                            </div>
-                          </div>
+                        {/* Left Side: Index, Barcode, and Actual Qty in one line */}
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          <span className="text-[11px] font-bold text-stone-400 font-mono shrink-0">
+                            #{idx + 1}
+                          </span>
+                          <span className="font-mono text-xs sm:text-sm font-bold text-stone-900 tracking-wider truncate">
+                            {barcode}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-[#F5F2EB] border border-stone-200/80 text-stone-700 shrink-0">
+                            Actual: <strong className="text-stone-900 font-bold font-mono">{expected}</strong>
+                          </span>
+                        </div>
 
-                          {/* Right Side: Quantity Counter with Plus/Minus & Status Pill */}
-                          <div className="flex items-center gap-3">
-                            {/* Expected status pill */}
-                            <div className="text-right">
-                              {isMatched && (
-                                <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                  <CheckCircle className="h-3.5 w-3.5 text-emerald-600" /> {count}/{expected} Matched (Found)
-                                </span>
-                              )}
-                              {isPartial && (
-                                <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
-                                  <span className="h-1.5 w-1.5 rounded-full bg-amber-600" />
-                                  {count}/{expected} Scanned ({expected - count} left)
-                                </span>
-                              )}
-                              {isExtra && (
-                                <div className="flex flex-col items-end">
-                                  <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full bg-amber-500 text-white shadow-2xs">
-                                    <AlertTriangle className="h-3.5 w-3.5 text-white" />
-                                    +{count - expected} Extra Added
-                                  </span>
-                                  <span className="text-[10px] text-amber-900 font-bold mt-0.5">
-                                    (Actual: {expected}, Scanned: {count})
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Direct Plus/Minus Quantity Control Buttons */}
-                            <div
-                              className={`flex items-center bg-white border rounded-lg shadow-2xs overflow-hidden ${
-                                isExtra
-                                  ? "border-amber-400 ring-1 ring-amber-300"
-                                  : isMatched
-                                  ? "border-emerald-300"
-                                  : "border-gray-300"
-                              }`}
+                        {/* Right Side: Status Pill, Stepper, Trash all in one line */}
+                        <div className="flex items-center gap-2 shrink-0">
+                          {isMatched && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 whitespace-nowrap">
+                              <CheckCircle className="h-3 w-3 text-emerald-600" /> {count}/{expected} Matched
+                            </span>
+                          )}
+                          {isPartial && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200 whitespace-nowrap">
+                              <span className="h-1.5 w-1.5 rounded-full bg-amber-600" />
+                              {count}/{expected} ({expected - count} left)
+                            </span>
+                          )}
+                          {isExtra && (
+                            <span
+                              className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#A27B5C] text-white shadow-2xs whitespace-nowrap"
+                              title={`Actual: ${expected}, Scanned: ${count}`}
                             >
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleDecrement(barcode)}
-                                className="h-8 w-8 text-gray-600 hover:text-red-700 hover:bg-red-50 rounded-none cursor-pointer"
-                                title="Decrease quantity"
-                              >
-                                <Minus className="h-3.5 w-3.5" />
-                              </Button>
+                              <AlertTriangle className="h-3 w-3 text-white" />
+                              +{count - expected} Extra
+                            </span>
+                          )}
 
-                              <span
-                                className={`w-9 text-center font-bold text-sm font-mono ${
-                                  isExtra
-                                    ? "text-amber-900 font-extrabold"
-                                    : "text-gray-900"
-                                }`}
-                              >
-                                {count}
-                              </span>
-
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleIncrement(barcode)}
-                                className={`h-8 w-8 rounded-none cursor-pointer ${
-                                  isExtra
-                                    ? "text-amber-700 hover:bg-amber-100"
-                                    : "text-gray-600 hover:text-emerald-700 hover:bg-emerald-50"
-                                }`}
-                                title="Increase quantity (+1)"
-                              >
-                                <Plus className="h-3.5 w-3.5" />
-                              </Button>
-                            </div>
-
-                            {/* Remove Icon */}
+                          {/* Direct Plus/Minus Quantity Control Buttons */}
+                          <div
+                            className={`flex items-center bg-white border rounded-lg shadow-2xs overflow-hidden h-7 ${
+                              isExtra
+                                ? "border-[#A27B5C]/60"
+                                : isMatched
+                                ? "border-emerald-300"
+                                : "border-stone-200"
+                            }`}
+                          >
                             <Button
                               type="button"
                               variant="ghost"
                               size="icon"
-                              onClick={() => handleRemoveBarcode(barcode)}
-                              className="h-8 w-8 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
-                              title="Delete this barcode"
+                              onClick={() => handleDecrement(barcode)}
+                              className="h-7 w-7 text-stone-500 hover:text-red-700 hover:bg-red-50 rounded-none cursor-pointer p-0"
+                              title="Decrease quantity"
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <Minus className="h-3 w-3" />
+                            </Button>
+
+                            <span
+                              className={`w-7 text-center font-bold text-xs font-mono ${
+                                isExtra
+                                  ? "text-[#543D2B] font-extrabold"
+                                  : "text-stone-900"
+                              }`}
+                            >
+                              {count}
+                            </span>
+
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleIncrement(barcode)}
+                              className="h-7 w-7 text-stone-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-none cursor-pointer p-0"
+                              title="Increase quantity (+1)"
+                            >
+                              <Plus className="h-3 w-3" />
                             </Button>
                           </div>
+
+                          {/* Remove Icon */}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleRemoveBarcode(barcode)}
+                            className="h-7 w-7 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer p-0"
+                            title="Delete this barcode"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
                         </div>
                       </div>
                     );
                   })
                 ) : (
-                  <div className="h-full flex flex-col items-center justify-center text-center p-8 border-2 border-dashed border-gray-200 rounded-xl">
-                    <Scan className="h-12 w-12 text-gray-300 mb-2 animate-pulse" />
-                    <p className="text-sm font-semibold text-gray-700">No barcodes scanned yet</p>
-                    <p className="text-xs text-gray-400 mt-1 max-w-xs">
+                  <div className="h-full flex flex-col items-center justify-center text-center p-8 border-2 border-dashed border-stone-200 rounded-xl bg-[#FAF8F5]/60">
+                    <div className="h-14 w-14 rounded-2xl bg-stone-100 flex items-center justify-center text-stone-400 mb-3">
+                      <Scan className="h-7 w-7 text-stone-400 animate-pulse" />
+                    </div>
+                    <p className="text-sm font-bold text-stone-800">No barcodes scanned yet</p>
+                    <p className="text-xs text-stone-400 mt-1 max-w-xs leading-relaxed">
                       Scan barcodes one by one on the left. If a barcode has multiple quantities, you can scan it repeatedly or press (+) to add more.
                     </p>
                   </div>
@@ -812,60 +767,60 @@ const BoxBarcodeScannerModal = ({
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden pt-2 gap-3">
             {/* Top KPI Metrics Bar */}
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 shrink-0">
-              <div className="bg-white border rounded-xl p-3 shadow-2xs">
-                <span className="text-xs text-gray-500 font-medium block">Total Expected</span>
-                <div className="text-lg font-extrabold text-gray-900 mt-0.5">
-                  {comparisonData.totalExpected} <span className="text-xs font-normal">Pcs</span>
+              <div className="bg-white border border-stone-200/80 rounded-xl p-3 shadow-2xs">
+                <span className="text-xs text-stone-500 font-medium block">Total Expected</span>
+                <div className="text-lg font-extrabold text-stone-900 mt-0.5 font-mono">
+                  {comparisonData.totalExpected} <span className="text-xs font-normal text-stone-500">Pcs</span>
                 </div>
               </div>
 
-              <div className="bg-white border rounded-xl p-3 shadow-2xs">
-                <span className="text-xs text-gray-500 font-medium block">Total Scanned</span>
-                <div className="text-lg font-extrabold text-blue-700 mt-0.5">
-                  {comparisonData.totalScanned} <span className="text-xs font-normal">Pcs</span>
+              <div className="bg-[#FAF8F5] border border-stone-200/80 rounded-xl p-3 shadow-2xs">
+                <span className="text-xs text-stone-500 font-medium block">Total Scanned</span>
+                <div className="text-lg font-extrabold text-[#543D2B] mt-0.5 font-mono">
+                  {comparisonData.totalScanned} <span className="text-xs font-normal text-stone-500">Pcs</span>
                 </div>
               </div>
 
-              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 shadow-2xs">
+              <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-xl p-3 shadow-2xs">
                 <span className="text-xs text-emerald-700 font-medium block">✓ Matched</span>
-                <div className="text-lg font-extrabold text-emerald-800 mt-0.5">
-                  {comparisonData.totalMatched} <span className="text-xs font-normal">Pcs</span>
+                <div className="text-lg font-extrabold text-emerald-800 mt-0.5 font-mono">
+                  {comparisonData.totalMatched} <span className="text-xs font-normal text-emerald-600">Pcs</span>
                 </div>
               </div>
 
               <div
                 className={`border rounded-xl p-3 shadow-2xs ${
                   comparisonData.totalMissing > 0
-                    ? "bg-rose-50 border-rose-300 text-rose-900"
-                    : "bg-gray-50 border-gray-200 text-gray-500"
+                    ? "bg-rose-50/70 border-rose-200 text-rose-900"
+                    : "bg-white border-stone-200 text-stone-400"
                 }`}
               >
-                <span className="text-xs font-medium block">✗ Missing</span>
-                <div className="text-lg font-extrabold mt-0.5">
+                <span className={`text-xs font-medium block ${comparisonData.totalMissing > 0 ? "text-rose-600" : "text-stone-400"}`}>
+                  ✗ Missing
+                </span>
+                <div className="text-lg font-extrabold mt-0.5 font-mono">
                   {comparisonData.totalMissing} <span className="text-xs font-normal">Pcs</span>
                 </div>
               </div>
 
-              <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 shadow-2xs">
-                <span className="text-xs text-purple-700 font-medium block">+ Extra</span>
-                <div className="text-lg font-extrabold text-purple-800 mt-0.5">
-                  {comparisonData.totalExtra} <span className="text-xs font-normal">Pcs</span>
+              <div className="bg-[#F5F2EB] border border-stone-200/80 rounded-xl p-3 shadow-2xs">
+                <span className="text-xs text-[#543D2B] font-medium block">+ Extra</span>
+                <div className="text-lg font-extrabold text-[#543D2B] mt-0.5 font-mono">
+                  {comparisonData.totalExtra} <span className="text-xs font-normal text-stone-500">Pcs</span>
                 </div>
               </div>
             </div>
 
-
-
             {/* Filter Tabs & Search Bar */}
             <div className="flex items-center justify-between gap-3 flex-wrap shrink-0">
-              <div className="flex items-center gap-1.5 bg-gray-100 p-1 rounded-lg">
+              <div className="flex items-center gap-1.5 bg-[#F5F2EB] p-1 rounded-xl border border-stone-200/80">
                 <button
                   type="button"
                   onClick={() => setComparisonFilter("all")}
-                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                     comparisonFilter === "all"
-                      ? "bg-white text-gray-900 shadow-2xs"
-                      : "text-gray-600 hover:text-gray-900"
+                      ? "bg-white text-stone-900 shadow-2xs"
+                      : "text-stone-600 hover:text-stone-900"
                   }`}
                 >
                   All Items ({comparisonData.items.length})
@@ -873,7 +828,7 @@ const BoxBarcodeScannerModal = ({
                 <button
                   type="button"
                   onClick={() => setComparisonFilter("matched")}
-                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                     comparisonFilter === "matched"
                       ? "bg-emerald-700 text-white shadow-2xs"
                       : "text-emerald-700 hover:bg-emerald-50"
@@ -890,7 +845,7 @@ const BoxBarcodeScannerModal = ({
                 <button
                   type="button"
                   onClick={() => setComparisonFilter("missing")}
-                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                     comparisonFilter === "missing"
                       ? "bg-rose-700 text-white shadow-2xs"
                       : "text-rose-700 hover:bg-rose-50"
@@ -907,10 +862,10 @@ const BoxBarcodeScannerModal = ({
                 <button
                   type="button"
                   onClick={() => setComparisonFilter("extra")}
-                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                     comparisonFilter === "extra"
-                      ? "bg-purple-700 text-white shadow-2xs"
-                      : "text-purple-700 hover:bg-purple-50"
+                      ? "bg-[#543D2B] text-white shadow-2xs"
+                      : "text-[#543D2B] hover:bg-[#FAF8F5]"
                   }`}
                 >
                   + Extra (
@@ -924,32 +879,30 @@ const BoxBarcodeScannerModal = ({
               </div>
 
               <div className="relative w-64">
-                <Search className="h-3.5 w-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <Search className="h-3.5 w-3.5 text-stone-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                 <Input
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search barcode or size..."
-                  className="pl-8 h-8 text-xs bg-white"
+                  placeholder="Search barcode..."
+                  className="pl-8 h-8 text-xs bg-white border-stone-200 rounded-lg text-stone-900"
                 />
               </div>
             </div>
 
             {/* Comparison Table */}
-            <div className="flex-1 bg-white border border-gray-200 rounded-xl overflow-hidden flex flex-col min-h-0 shadow-xs">
+            <div className="flex-1 bg-white border border-stone-200/80 rounded-xl overflow-hidden flex flex-col min-h-0 shadow-2xs">
               <div className="flex-1 overflow-y-auto min-h-0">
                 <table className="w-full text-left text-xs border-collapse">
-                  <thead className="bg-gray-50 border-b text-gray-600 font-semibold sticky top-0 z-10">
+                  <thead className="bg-[#F5F2EB] border-b border-stone-200 text-stone-700 font-semibold sticky top-0 z-10">
                     <tr>
                       <th className="py-2.5 px-3">Barcode</th>
-                      <th className="py-2.5 px-3">Size</th>
-                      <th className="py-2.5 px-3">Amount (₹)</th>
                       <th className="py-2.5 px-3 text-center">Expected</th>
                       <th className="py-2.5 px-3 text-center">Scanned</th>
                       <th className="py-2.5 px-3">Status</th>
-                      <th className="py-2.5 px-3 text-right">Double-Check / Action</th>
+                      <th className="py-2.5 px-3 text-right">Action</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200">
+                  <tbody className="divide-y divide-stone-100">
                     {filteredComparisonItems.length > 0 ? (
                       filteredComparisonItems.map((item) => {
                         const isMatched =
@@ -964,38 +917,32 @@ const BoxBarcodeScannerModal = ({
                         return (
                           <tr
                             key={item.barcode}
-                            className={`hover:bg-gray-50 transition-colors ${
+                            className={`hover:bg-[#FAF8F5] transition-colors ${
                               isMissing
-                                ? "bg-rose-50/40"
+                                ? "bg-rose-50/30"
                                 : isPartial
-                                ? "bg-amber-50/40"
+                                ? "bg-amber-50/30"
                                 : isExtra
-                                ? "bg-purple-50/40"
+                                ? "bg-[#FDFBF7]"
                                 : "bg-white"
                             }`}
                           >
-                            <td className="py-2.5 px-3 font-mono font-bold text-gray-900">
+                            <td className="py-2.5 px-3 font-mono font-bold text-stone-900">
                               {item.barcode}
                             </td>
-                            <td className="py-2.5 px-3 font-medium text-gray-700">
-                              {item.size}
-                            </td>
-                            <td className="py-2.5 px-3 font-medium text-gray-700">
-                              ₹{item.amount}
-                            </td>
-                            <td className="py-2.5 px-3 text-center font-bold text-gray-800">
+                            <td className="py-2.5 px-3 text-center font-bold text-stone-700 font-mono">
                               {item.expectedQty}
                             </td>
                             <td className="py-2.5 px-3 text-center font-bold">
                               <span
-                                className={`inline-block px-2 py-0.5 rounded font-mono ${
+                                className={`inline-block px-2 py-0.5 rounded-md font-mono ${
                                   isMatched
                                     ? "bg-emerald-100 text-emerald-800"
                                     : isPartial
                                     ? "bg-amber-100 text-amber-800"
                                     : isMissing
                                     ? "bg-rose-100 text-rose-800"
-                                    : "bg-purple-100 text-purple-800"
+                                    : "bg-stone-100 text-stone-800"
                                 }`}
                               >
                                 {item.scannedQty}
@@ -1003,39 +950,25 @@ const BoxBarcodeScannerModal = ({
                             </td>
                             <td className="py-2.5 px-3">
                               {isMatched && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
                                   <CheckCircle className="h-3 w-3" /> Matched ({item.scannedQty}/{item.expectedQty})
                                 </span>
                               )}
                               {isPartial && (
-                                <div className="space-y-1">
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                                    <span className="h-1.5 w-1.5 rounded-full bg-amber-600" />
-                                    Scanned {item.scannedQty}/{item.expectedQty} ({item.diff} Missing)
-                                  </span>
-                                  {item.isDoubleChecked && (
-                                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 block">
-                                      <CheckCheck className="h-3 w-3" /> Verified Missing
-                                    </span>
-                                  )}
-                                </div>
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-amber-600" />
+                                  Scanned {item.scannedQty}/{item.expectedQty} ({item.diff} Missing)
+                                </span>
                               )}
                               {isMissing && (
-                                <div className="space-y-1">
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
-                                    <XCircle className="h-3 w-3" /> Missing {item.expectedQty} Pcs
-                                  </span>
-                                  {item.isDoubleChecked && (
-                                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 block">
-                                      <CheckCheck className="h-3 w-3" /> Verified Missing
-                                    </span>
-                                  )}
-                                </div>
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                                  <XCircle className="h-3 w-3" /> Missing {item.expectedQty} Pcs
+                                </span>
                               )}
                               {isExtra && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
-                                  <AlertTriangle className="h-3 w-3 text-amber-600" />
-                                  +{item.diff} Extra Added (Actual: {item.expectedQty}, Scanned: {item.scannedQty})
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-[#F5F2EB] text-[#543D2B] border border-stone-200">
+                                  <AlertTriangle className="h-3 w-3 text-[#A27B5C]" />
+                                  +{item.diff} Extra (Actual: {item.expectedQty}, Scanned: {item.scannedQty})
                                 </span>
                               )}
                             </td>
@@ -1047,25 +980,10 @@ const BoxBarcodeScannerModal = ({
                                     size="sm"
                                     variant="outline"
                                     onClick={() => handleIncrement(item.barcode)}
-                                    className="h-6 text-[11px] px-2 bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100 font-semibold cursor-pointer"
+                                    className="h-6.5 text-[11px] px-2 bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 font-semibold rounded-md cursor-pointer"
                                     title="Add / Found 1 piece"
                                   >
                                     <Plus className="h-3 w-3 mr-0.5" /> Add Piece
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant={item.isDoubleChecked ? "default" : "outline"}
-                                    onClick={() => toggleDoubleCheckMissing(item.barcode)}
-                                    className={`h-6 text-[11px] px-2 font-semibold cursor-pointer ${
-                                      item.isDoubleChecked
-                                        ? "bg-emerald-600 text-white hover:bg-emerald-700"
-                                        : "bg-white text-gray-700 hover:bg-gray-100"
-                                    }`}
-                                    title="Mark as double-checked"
-                                  >
-                                    <CheckCheck className="h-3 w-3 mr-1" />
-                                    {item.isDoubleChecked ? "Double-Checked" : "Double-Check"}
                                   </Button>
                                 </div>
                               )}
@@ -1075,7 +993,7 @@ const BoxBarcodeScannerModal = ({
                                   size="sm"
                                   variant="outline"
                                   onClick={() => handleDecrement(item.barcode)}
-                                  className="h-6 text-[11px] px-2 text-rose-700 border-rose-300 hover:bg-rose-50 font-semibold cursor-pointer"
+                                  className="h-6.5 text-[11px] px-2 text-rose-700 border-rose-200 hover:bg-rose-50 font-semibold rounded-md cursor-pointer"
                                 >
                                   <Minus className="h-3 w-3 mr-0.5" /> Remove Extra
                                 </Button>
@@ -1091,7 +1009,7 @@ const BoxBarcodeScannerModal = ({
                       })
                     ) : (
                       <tr>
-                        <td colSpan="7" className="text-center py-10 text-gray-500 text-xs italic">
+                        <td colSpan="5" className="text-center py-10 text-stone-400 text-xs italic">
                           No items match the selected filter.
                         </td>
                       </tr>
@@ -1104,7 +1022,7 @@ const BoxBarcodeScannerModal = ({
         )}
 
         {/* Modal Footer Actions */}
-        <DialogFooter className="mt-3 pt-3 border-t shrink-0 flex items-center justify-between flex-wrap gap-2">
+        <DialogFooter className="mt-3 pt-3 border-t border-stone-200/80 shrink-0 flex items-center justify-between flex-wrap gap-2">
           <div>
             {activeStep === 2 ? (
               <Button
@@ -1115,7 +1033,7 @@ const BoxBarcodeScannerModal = ({
                   setActiveStep(1);
                   setTimeout(() => barcodeInputRef.current?.focus(), 100);
                 }}
-                className="text-xs flex items-center gap-1.5 cursor-pointer"
+                className="text-xs flex items-center gap-1.5 border-stone-200 text-stone-700 hover:bg-[#F5F2EB] rounded-xl cursor-pointer"
               >
                 <ArrowLeft className="h-3.5 w-3.5" />
                 Back to Scanner (Step 1)
@@ -1126,10 +1044,10 @@ const BoxBarcodeScannerModal = ({
                 variant="outline"
                 size="sm"
                 onClick={handleClearAll}
-                className="text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200 cursor-pointer"
+                className="text-xs text-stone-500 hover:text-rose-600 hover:bg-rose-50 border-stone-200 rounded-xl cursor-pointer"
               >
                 <Trash2 className="h-3.5 w-3.5 mr-1" />
-                Clear Scanned (0 pcs)
+                Clear Scanned ({comparisonData.totalScanned} pcs)
               </Button>
             )}
           </div>
@@ -1140,42 +1058,30 @@ const BoxBarcodeScannerModal = ({
               variant="outline"
               size="sm"
               onClick={() => onOpenChange(false)}
-              className="text-xs cursor-pointer"
+              className="text-xs border-stone-200 text-stone-600 hover:bg-[#F5F2EB] rounded-xl cursor-pointer px-4"
             >
               Cancel
             </Button>
 
-            {activeStep === 1 ? (
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => setActiveStep(2)}
-                className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-xs"
-              >
-                <span>Proceed to Comparison (Step 2)</span>
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                size="sm"
-                onClick={handleSave}
-                disabled={isSaving}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-xs"
-              >
-                {isSaving ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Saving Barcodes...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle className="h-3.5 w-3.5" />
-                    Save & Update Barcodes
-                  </>
-                )}
-              </Button>
-            )}
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleSave}
+              disabled={isSaving}
+              className="bg-[#543D2B] hover:bg-[#412E20] text-white text-xs font-bold rounded-xl px-4 flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Saving Barcodes...
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="h-3.5 w-3.5" />
+                  Save & Update Barcodes
+                </>
+              )}
+            </Button>
           </div>
         </DialogFooter>
       </DialogContent>

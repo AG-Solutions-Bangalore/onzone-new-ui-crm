@@ -241,7 +241,7 @@ const OrderFormList = () => {
                     <Edit className="h-3.5 w-3.5" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Edit Order</TooltipContent>
+                <TooltipContent>Edit</TooltipContent>
               </Tooltip>
             </TooltipProvider>
 
@@ -259,7 +259,7 @@ const OrderFormList = () => {
                     <Eye className="h-3.5 w-3.5" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>View Order</TooltipContent>
+                <TooltipContent>View</TooltipContent>
               </Tooltip>
             </TooltipProvider>
 
@@ -278,7 +278,7 @@ const OrderFormList = () => {
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Delete Order</TooltipContent>
+                <TooltipContent>Delete</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>

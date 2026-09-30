@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import axios from "axios";
 import { z } from "zod";
 import {
   Trash2,
@@ -51,6 +52,98 @@ const orderSchema = z.object({
   work_order_sa_count: z.union([z.string(), z.number()]).optional(),
   work_order_sa_remarks: z.string().optional(),
 });
+
+// Calculate total pieces and box count from a combination string like "42x1 + 48x1"
+const computeComboTotal = (comboStr) => {
+  if (!comboStr) return { pcs: 0, boxes: 0 };
+  let totalPcs = 0;
+  let totalBoxes = 0;
+
+  const parts = String(comboStr).split("+");
+  parts.forEach((part) => {
+    const match = part.trim().match(/(\d+)\s*[xX*]\s*(\d+)/);
+    if (match) {
+      const size = parseInt(match[1], 10) || 0;
+      const count = parseInt(match[2], 10) || 0;
+      totalPcs += size * count;
+      totalBoxes += count;
+    } else {
+      const num = parseInt(part.trim(), 10);
+      if (!isNaN(num)) {
+        totalPcs += num;
+        totalBoxes += 1;
+      }
+    }
+  });
+
+  return { pcs: totalPcs, boxes: totalBoxes };
+};
+
+// Parse response from getboxcombination/{value} API
+const parseBoxCombinationResponse = (data) => {
+  if (!data) return { minCombo: null, maxCombo: null };
+
+  const formatComboValue = (v) => {
+    if (v === null || v === undefined) return null;
+    if (typeof v === "string" || typeof v === "number") return String(v);
+    if (Array.isArray(v)) {
+      return v
+        .map((item) => {
+          if (typeof item === "object" && item !== null) {
+            return item.box_name || item.name || item.size || JSON.stringify(item);
+          }
+          return String(item);
+        })
+        .join(" + ");
+    }
+    if (typeof v === "object") {
+      if (v.combination) return formatComboValue(v.combination);
+      if (v.combo) return formatComboValue(v.combo);
+      return Object.entries(v)
+        .map(([k, val]) => `${k}x${val}`)
+        .join(" + ");
+    }
+    return String(v);
+  };
+
+  const payload =
+    data.data ||
+    data.box_combination ||
+    data.boxCombination ||
+    data.combination ||
+    data.combinations ||
+    data;
+
+  const minRaw =
+    payload.closest_min_combo ??
+    payload.closest_min ??
+    payload.minCombo ??
+    payload.min_combo ??
+    payload.min ??
+    payload.min_combination ??
+    payload.minimum ??
+    payload.min_box ??
+    payload.minBox;
+
+  const maxRaw =
+    payload.closest_max_combo ??
+    payload.closest_max ??
+    payload.maxCombo ??
+    payload.max_combo ??
+    payload.max ??
+    payload.max_combination ??
+    payload.maximum ??
+    payload.max_box ??
+    payload.maxBox;
+
+  const minFormatted = formatComboValue(minRaw);
+  const maxFormatted = formatComboValue(maxRaw);
+
+  return {
+    minCombo: minFormatted,
+    maxCombo: maxFormatted,
+  };
+};
 
 // Helper function to calculate closest min and max box combinations based on pieces
 const calculateBoxCombos = (totalPcs) => {
@@ -217,9 +310,55 @@ const CreateSales = () => {
   const [loading, setLoading] = useState(false);
   const [currentInputValue, setCurrentInputValue] = useState("");
 
-  const boxCombos = useMemo(() => {
-    return calculateBoxCombos(workorder.work_order_sa_pcs);
+  // Debounce pieces input to prevent firing API on every single keystroke/arrow step
+  const [debouncedPcs, setDebouncedPcs] = useState(workorder.work_order_sa_pcs);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedPcs(workorder.work_order_sa_pcs);
+    }, 450);
+    return () => clearTimeout(timer);
   }, [workorder.work_order_sa_pcs]);
+
+  // Query backend getboxcombination/{value} API using debounced value
+  const { data: apiBoxCombo, isLoading: isBoxComboLoading } = useQuery({
+    queryKey: ["boxCombination", debouncedPcs],
+    queryFn: async () => {
+      const token = localStorage.getItem("token");
+      const pcs = debouncedPcs;
+      if (!pcs || parseInt(pcs, 10) <= 0) return null;
+      try {
+        const response = await axios.get(
+          `${BASE_URL}/api/getboxcombination/${pcs}`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+        console.log("getboxcombination API response for", pcs, ":", response.data);
+        return response.data;
+      } catch (err) {
+        console.warn("getboxcombination API error:", err);
+        return null;
+      }
+    },
+    enabled: !!(debouncedPcs && parseInt(debouncedPcs, 10) > 0),
+    staleTime: 60 * 1000,
+  });
+
+  const isComboLoading =
+    isBoxComboLoading ||
+    (workorder.work_order_sa_pcs !== debouncedPcs &&
+      parseInt(workorder.work_order_sa_pcs, 10) > 0);
+
+  const boxCombos = useMemo(() => {
+    if (apiBoxCombo) {
+      const parsed = parseBoxCombinationResponse(apiBoxCombo);
+      if (parsed.minCombo || parsed.maxCombo) {
+        return parsed;
+      }
+    }
+    return calculateBoxCombos(workorder.work_order_sa_pcs);
+  }, [apiBoxCombo, workorder.work_order_sa_pcs]);
 
   const uniqueBarcodes = useMemo(() => {
     const map = new Map();
@@ -550,12 +689,11 @@ const CreateSales = () => {
                 placeholder="Search and select retailer..."
               />
             </div>
-
-            {/* Sales Date */}
+            {/* Packing Date */}
             <div className="space-y-1.5">
               <Label htmlFor="salesDate" className="text-xs font-semibold text-stone-700 flex items-center gap-1">
                 <Calendar className="h-3.5 w-3.5 text-stone-400" />
-                Sales Date <span className="text-red-500">*</span>
+                Packing Date <span className="text-red-500">*</span>
               </Label>
               <Input
                 type="date"
@@ -584,12 +722,67 @@ const CreateSales = () => {
               />
               {workorder.work_order_sa_pcs && parseInt(workorder.work_order_sa_pcs, 10) > 0 && (
                 <div className="flex items-center gap-1.5 text-[10px] pt-0.5">
-                  <span className="bg-[#E5D7C3]/70 text-[#543D2B] px-2 py-0.5 rounded-md font-bold border border-[#D8C7B0]">
-                    <strong className="text-stone-800">Min:</strong> {boxCombos.minCombo || "N/A"}
-                  </span>
-                  <span className="bg-[#E5D7C3]/70 text-[#543D2B] px-2 py-0.5 rounded-md font-bold border border-[#D8C7B0]">
-                    <strong className="text-stone-800">Max:</strong> {boxCombos.maxCombo || "N/A"}
-                  </span>
+                  {isComboLoading ? (
+                    <span className="text-stone-400 flex items-center gap-1 py-0.5 font-medium">
+                      <Loader2 className="h-3 w-3 animate-spin text-[#A27B5C]" /> Loading combinations...
+                    </span>
+                  ) : (() => {
+                    const minStr = boxCombos.minCombo?.trim();
+                    const maxStr = boxCombos.maxCombo?.trim();
+                    const isMatched =
+                      (minStr && maxStr && minStr.replace(/\s+/g, "") === maxStr.replace(/\s+/g, "")) ||
+                      (!minStr && maxStr) ||
+                      (minStr && !maxStr);
+
+                    if (isMatched) {
+                      const matchedStr = (maxStr || minStr || "").trim();
+                      const calc = computeComboTotal(matchedStr);
+                      const sumVal =
+                        apiBoxCombo?.total ||
+                        apiBoxCombo?.total_pcs ||
+                        calc.pcs ||
+                        workorder.work_order_sa_pcs;
+                      const displayMatched = matchedStr
+                        ? matchedStr.includes("=")
+                          ? matchedStr
+                          : `${matchedStr}${sumVal ? ` = ${sumVal}` : ""}`
+                        : "N/A";
+
+                      return (
+                        <div className="flex items-center flex-wrap gap-1.5">
+                          <span className="bg-[#E5D7C3]/70 text-[#543D2B] px-2.5 py-0.5 rounded-md font-bold border border-[#D8C7B0]">
+                            <strong className="text-stone-800">Matched:</strong> {displayMatched}
+                          </span>
+                        </div>
+                      );
+                    }
+
+                    const minCalc = computeComboTotal(minStr);
+                    const maxCalc = computeComboTotal(maxStr);
+
+                    const minDisplay = minStr
+                      ? minStr.includes("=")
+                        ? minStr
+                        : `${minStr}${minCalc.pcs ? ` = ${minCalc.pcs}` : ""}`
+                      : "N/A";
+
+                    const maxDisplay = maxStr
+                      ? maxStr.includes("=")
+                        ? maxStr
+                        : `${maxStr}${maxCalc.pcs ? ` = ${maxCalc.pcs}` : ""}`
+                      : "N/A";
+
+                    return (
+                      <div className="flex items-center flex-wrap gap-1.5">
+                        <span className="bg-[#E5D7C3]/70 text-[#543D2B] px-2 py-0.5 rounded-md font-bold border border-[#D8C7B0]">
+                          <strong className="text-stone-800">Min:</strong> {minDisplay}
+                        </span>
+                        <span className="bg-[#E5D7C3]/70 text-[#543D2B] px-2 py-0.5 rounded-md font-bold border border-[#D8C7B0]">
+                          <strong className="text-stone-800">Max:</strong> {maxDisplay}
+                        </span>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </div>

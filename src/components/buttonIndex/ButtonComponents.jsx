@@ -206,7 +206,7 @@ export const InvoiceDelete = forwardRef(({ onClick, className }, ref) => {
       ref={ref}
       onClick={onClick}
       className={className}
-      title="Invoice Delete"
+      title="Delete"
       variant="ghost"
       size="icon"
     >
@@ -348,7 +348,7 @@ export const ContractDelete = forwardRef(({ onClick, className }, ref) => {
       ref={ref}
       onClick={onClick}
       className={className}
-      title="Contract Delete"
+      title="Delete"
       variant="ghost"
       size="icon"
     >
@@ -1409,7 +1409,7 @@ export const PurchaseOrderEdit = forwardRef(({ onClick, className }, ref) => {
           <Edit className="h-4 w-4 text-black" />
         </Button>
       </TooltipTrigger>
-      <TooltipContent>Edit Purchase Order</TooltipContent>
+      <TooltipContent>Edit</TooltipContent>
     </Tooltip>
   );
 });
@@ -1434,7 +1434,7 @@ export const PurchaseOrderView = ({ onClick, className }) => {
             <Eye className="h-4 w-4 text-black" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>View Purchase Order</TooltipContent>
+        <TooltipContent>View</TooltipContent>
       </Tooltip>
     </TooltipProvider>
   );
@@ -1476,7 +1476,7 @@ export const PurchaseEdit = ({ onClick, className }) => {
           <Edit className="h-4 w-4 text-black" />
         </Button>
       </TooltipTrigger>
-      <TooltipContent>Edit Purchase</TooltipContent>
+      <TooltipContent>Edit</TooltipContent>
     </Tooltip>
   );
 };
@@ -1517,7 +1517,7 @@ export const ProductionEdit = ({ onClick, className }) => {
           <Edit className="h-4 w-4 text-black" />
         </Button>
       </TooltipTrigger>
-      <TooltipContent>Edit Production</TooltipContent>
+      <TooltipContent>Edit</TooltipContent>
     </Tooltip>
   );
 };
@@ -1541,7 +1541,7 @@ export const ProductionDelete = ({ onClick, className }) => {
           <Trash className="h-4 w-4  text-red-500 " />
         </Button>
       </TooltipTrigger>
-      <TooltipContent>Delete Production</TooltipContent>
+      <TooltipContent>Delete</TooltipContent>
     </Tooltip>
   );
 };
@@ -1566,7 +1566,7 @@ export const ProductionremoveRow = ({ onClick, className }) => {
           <MinusCircle className="h-4 w-4  text-red-500 " />
         </Button>
       </TooltipTrigger>
-      <TooltipContent>Delete Production</TooltipContent>
+      <TooltipContent>Delete</TooltipContent>
     </Tooltip>
   );
 };
@@ -1608,7 +1608,7 @@ export const ProcessingEdit = ({ onClick, className }) => {
           <Edit className="h-4 w-4 text-black" />
         </Button>
       </TooltipTrigger>
-      <TooltipContent>Edit Processing</TooltipContent>
+      <TooltipContent>Edit</TooltipContent>
     </Tooltip>
   );
 };
@@ -1632,7 +1632,7 @@ export const ProcessingDelete = ({ onClick, className }) => {
           <Trash className="h-4 w-4  text-red-500 " />
         </Button>
       </TooltipTrigger>
-      <TooltipContent>Delete Processing</TooltipContent>
+      <TooltipContent>Delete</TooltipContent>
     </Tooltip>
   );
 };
@@ -1703,7 +1703,7 @@ export const CostingEdit = ({ onClick, className }) => {
           <Edit className="h-4 w-4 text-black" />
         </Button>
       </TooltipTrigger>
-      <TooltipContent>Edit Costing</TooltipContent>
+      <TooltipContent>Edit</TooltipContent>
     </Tooltip>
   );
 };
@@ -1729,7 +1729,7 @@ export const CostingView = ({ onClick, className }) => {
             <Eye className="h-4 w-4 text-black" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>View Costing</TooltipContent>
+        <TooltipContent>View</TooltipContent>
       </Tooltip>
     </TooltipProvider>
   );

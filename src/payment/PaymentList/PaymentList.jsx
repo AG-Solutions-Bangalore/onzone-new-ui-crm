@@ -266,7 +266,7 @@ const PaymentList = () => {
                     }}
                   ></InvoiceEdit>
                 </TooltipTrigger>
-                <TooltipContent>Edit payment</TooltipContent>
+                <TooltipContent>Edit</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>

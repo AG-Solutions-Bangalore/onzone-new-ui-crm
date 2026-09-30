@@ -1,4 +1,4 @@
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Scan } from "lucide-react";
 import {
   Collapsible,
   CollapsibleContent,
@@ -26,8 +26,10 @@ import {
 } from "@/components/ui/tooltip";
 import { Link, useLocation } from "react-router-dom";
 import React from "react";
+import { GoodsReceivedScannerModal } from "@/components/GoodsReceivedScannerModal";
 
 export function NavMain({ items }) {
+  const [isScanModalOpen, setIsScanModalOpen] = React.useState(false);
   const location = useLocation();
   const { state } = useSidebar();
   const isCollapsed = state === "collapsed";
@@ -96,8 +98,21 @@ export function NavMain({ items }) {
                         <span className="sr-only">{item.title}</span>
                       </Link>
                     </TooltipTrigger>
-                    <TooltipContent side="right" align="center" className="bg-[#1C1D1F] text-stone-200 border-stone-800 text-xs">
-                      {item.title}
+                    <TooltipContent side="right" align="center" className="bg-[#1C1D1F] text-stone-200 border-stone-800 text-xs flex items-center gap-2">
+                      <span>{item.title}</span>
+                      {(item.hasScan || item.title === "Goods Received") && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setIsScanModalOpen(true);
+                          }}
+                          className="px-1.5 py-0.5 rounded bg-[#E5D7C3] text-stone-950 hover:bg-white text-[10px] font-bold cursor-pointer transition-colors shadow-2xs"
+                        >
+                          Scan
+                        </button>
+                      )}
                     </TooltipContent>
                   </Tooltip>
                 </SidebarMenuItem>
@@ -122,7 +137,26 @@ export function NavMain({ items }) {
                       }`}
                     />
                   )}
-                  <span className="flex-1">{item.title}</span>
+                  <span className="whitespace-nowrap font-medium text-xs">{item.title}</span>
+                  {(item.hasScan || item.title === "Goods Received") && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setIsScanModalOpen(true);
+                      }}
+                      className={`ml-auto shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold tracking-wide transition-all border cursor-pointer select-none ${
+                        isParentActive
+                          ? "bg-[#161719] text-[#E5D7C3] border-stone-800 hover:bg-black hover:text-white shadow-xs"
+                          : "bg-white/10 text-stone-200 border-white/15 hover:bg-[#E5D7C3] hover:text-stone-950 hover:border-[#E5D7C3]"
+                      }`}
+                      title="Quick Scan for Goods Received"
+                    >
+                      <Scan className="h-2.5 w-2.5" />
+                      <span>Scan</span>
+                    </button>
+                  )}
                 </Link>
               </SidebarMenuItem>
             );
@@ -309,6 +343,12 @@ export function NavMain({ items }) {
           );
         })}
       </SidebarMenu>
+
+      {/* Goods Received Barcode Scanner Modal */}
+      <GoodsReceivedScannerModal
+        open={isScanModalOpen}
+        onOpenChange={setIsScanModalOpen}
+      />
     </SidebarGroup>
   );
 }

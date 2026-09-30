@@ -146,7 +146,7 @@ const EditWidth = ({ widthId }) => {
             </PopoverTrigger>
           </TooltipTrigger>
           <TooltipContent>
-            <p>Edit Width</p>
+            <p>Edit</p>
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>

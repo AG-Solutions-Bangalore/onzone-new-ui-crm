@@ -361,9 +361,8 @@ const WorkOrderReport = () => {
                                                             className="text-center py-12 text-gray-500"
                                                           >
                                                             {isLoading ? (
-                                                              <div className="flex items-center justify-center gap-2">
-                                                                <Loader2 className="h-5 w-5 animate-spin" />
-                                                                Loading work orders...
+                                                              <div className="flex items-center justify-center py-6">
+                                                                <Loader2 className="h-7 w-7 animate-spin text-[#A27B5C]" />
                                                               </div>
                                                             ) : (
                                                               <div className="space-y-2">
