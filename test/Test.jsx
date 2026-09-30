@@ -851,78 +851,56 @@ const DcReceiptReceived = () => {
               {/* Main Details Table with Single Border */}
               <table className="w-full mb-1 border-collapse text-sm">
                 <tbody>
+                  {/* Line 1: Factory | Brand | Date */}
                   <tr className="border-t border-l border-r border-black">
-                    <td className="font-semibold p-1 w-[8rem] border-r">
+                    <td className="font-semibold p-1.5 w-[7rem] border-r">
                       Factory
                     </td>
-                    <td className="p-1 w-[16rem] border-r">
+                    <td className="p-1.5 w-[14rem] border-r">
                       : {workOrder.work_order_rc_factory}
                     </td>
-                    <td className="font-semibold p-1 w-[6rem] text-right border-r">
+                    <td className="font-semibold p-1.5 w-[5.5rem] text-right border-r">
+                      Brand
+                    </td>
+                    <td className="p-1.5 w-[10rem] border-r">
+                      : {workOrder.work_order_rc_brand}
+                    </td>
+                    <td className="font-semibold p-1.5 w-[5rem] text-right border-r">
                       Date
                     </td>
-                    <td className="p-1 w-[8rem]">
+                    <td className="p-1.5 w-[9rem]">
                       :{" "}
                       {moment(workOrder.work_order_rc_date).format(
                         "DD-MM-YYYY"
                       )}
                     </td>
                   </tr>
-                  <tr className="border-l border-r border-black">
-                    <td className="font-semibold p-1 w-[8rem] border-r">
-                      Brand
-                    </td>
-                    <td className="p-1 w-[16rem] border-r">
-                      : {workOrder.work_order_rc_brand}
-                    </td>
-                    <td className="font-semibold p-1 w-[6rem] text-right border-r">
-                      DC No
-                    </td>
-                    <td className="p-1 w-[8rem]">
-                      : {workOrder.work_order_rc_dc_no}
-                    </td>
-                    <td className="font-semibold p-1 w-[6rem] text-right border-r">
-                      DC Date
-                    </td>
-                    <td className="p-1 w-[8rem]">
-                      :{" "}
-                      {moment(workOrder.work_order_rc_dc_date).format(
-                        "DD-MM-YYYY"
-                      )}
-                    </td>
-                  </tr>
-                  <tr className="border-l border-r border-black">
-                    <td className="font-semibold p-1 w-[8rem] border-r">
-                      No of Box
-                    </td>
-                    <td className="p-1 w-[16rem] border-r">
-                      : {workOrder.work_order_rc_box}
-                    </td>
-                    <td className="font-semibold p-1 w-[6rem] text-right border-r">
-                      Total Pcs
-                    </td>
-                    <td className="p-1 w-[8rem] border-r">
-                      : {workOrder.work_order_rc_pcs}
-                    </td>
-                    <td className="font-semibold p-1 w-[6rem] text-right border-r">
-                      Received By
-                    </td>
-                    <td className="p-1 w-[8rem]">
-                      : {workOrder.work_order_rc_received_by}
-                    </td>
-                  </tr>
+
+                  {/* Line 2: Work Order Ref | No of Box | Total Pcs | Remarks */}
                   <tr className="border-l border-r border-b border-black">
-                    <td className="font-semibold p-1 w-[8rem] border-r">
-                      Work Order No
+                    <td className="font-semibold p-1.5 w-[7rem] border-r">
+                      Work Order Ref
                     </td>
-                    <td className="p-1 w-[16rem] border-r">
+                    <td className="p-1.5 w-[14rem] border-r">
                       : {workOrder.work_order_rc_id}
                     </td>
-                    <td className="font-semibold p-1 w-[6rem] text-right border-r">
+                    <td className="font-semibold p-1.5 w-[5.5rem] text-right border-r">
+                      No of Box
+                    </td>
+                    <td className="p-1.5 w-[10rem] border-r">
+                      : {workOrder.work_order_rc_box}
+                    </td>
+                    <td className="font-semibold p-1.5 w-[5.5rem] text-right border-r">
+                      Total Pcs
+                    </td>
+                    <td className="p-1.5 w-[9rem] border-r">
+                      : {workOrder.work_order_rc_pcs}
+                    </td>
+                    <td className="font-semibold p-1.5 w-[5rem] text-right border-r">
                       Remarks
                     </td>
-                    <td colSpan="3" className="p-1 break-words">
-                      : {workOrder.work_order_rc_remarks}
+                    <td className="p-1.5 w-[9rem] break-words">
+                      : {workOrder.work_order_rc_remarks || "-"}
                     </td>
                   </tr>
                 </tbody>

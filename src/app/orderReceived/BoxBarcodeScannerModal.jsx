@@ -45,11 +45,13 @@ const BoxBarcodeScannerModal = ({
   const [scanningActive, setScanningActive] = useState(true);
   const [inputValue, setInputValue] = useState("");
   const [scannedCounts, setScannedCounts] = useState({});
+  const [scanOrder, setScanOrder] = useState([]);
   const [scanFeedback, setScanFeedback] = useState(null);
   const [comparisonFilter, setComparisonFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
 
   const barcodeInputRef = useRef(null);
+  const scannedListRef = useRef(null);
   const feedbackTimeoutRef = useRef(null);
 
   // Initialize or reset state when modal opens or box changes
@@ -65,8 +67,10 @@ const BoxBarcodeScannerModal = ({
       // If this box was previously scanned/verified, restore the scanned counts so progress is preserved!
       if (savedScannedCounts && Object.keys(savedScannedCounts).length > 0) {
         setScannedCounts({ ...savedScannedCounts });
+        setScanOrder(Object.keys(savedScannedCounts).reverse());
       } else {
         setScannedCounts({});
+        setScanOrder([]);
       }
 
       setTimeout(() => {
@@ -183,6 +187,31 @@ const BoxBarcodeScannerModal = ({
     }, 3500);
   };
 
+  // Ordered scanned items with the most recently scanned item at the top
+  const orderedScannedItems = useMemo(() => {
+    const seen = new Set();
+    const result = [];
+
+    // 1. Items in order of most recent scan/increment
+    scanOrder.forEach((barcode) => {
+      const count = scannedCounts[barcode] || 0;
+      if (count > 0 && !seen.has(barcode)) {
+        seen.add(barcode);
+        result.push([barcode, count]);
+      }
+    });
+
+    // 2. Any barcodes in scannedCounts not yet in scanOrder (e.g. restored state)
+    Object.entries(scannedCounts).forEach(([barcode, count]) => {
+      if (count > 0 && !seen.has(barcode)) {
+        seen.add(barcode);
+        result.push([barcode, count]);
+      }
+    });
+
+    return result;
+  }, [scanOrder, scannedCounts]);
+
   // Handle Scanning Barcode
   const handleScanBarcode = (rawCode) => {
     const barcode = (rawCode || "").trim().toUpperCase();
@@ -197,6 +226,7 @@ const BoxBarcodeScannerModal = ({
       ...prev,
       [barcode]: nextCount,
     }));
+    setScanOrder((prev) => [barcode, ...prev.filter((b) => b !== barcode)]);
 
     // Check feedback status
     if (expected > 0) {
@@ -231,6 +261,7 @@ const BoxBarcodeScannerModal = ({
     setInputValue("");
     setTimeout(() => {
       barcodeInputRef.current?.focus();
+      scannedListRef.current?.scrollTo({ top: 0, behavior: "smooth" });
     }, 50);
   };
 
@@ -255,6 +286,10 @@ const BoxBarcodeScannerModal = ({
       ...prev,
       [clean]: nextCount,
     }));
+    setScanOrder((prev) => [clean, ...prev.filter((b) => b !== clean)]);
+    setTimeout(() => {
+      scannedListRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    }, 50);
 
     if (expected > 0 && nextCount === expected) {
       showFeedback(
@@ -293,26 +328,31 @@ const BoxBarcodeScannerModal = ({
       delete next[clean];
       return next;
     });
+    setScanOrder((prev) => prev.filter((b) => b !== clean));
     showFeedback("info", `Removed ${clean} from scanned list`, clean);
   };
 
   // Reset to original barcodes from DC
   const handleResetToOriginal = () => {
     const counts = {};
+    const order = [];
     (originalBarcodes || []).forEach((bc) => {
       if (!bc) return;
       const clean = bc.trim().toUpperCase();
       if (clean) {
+        if (!counts[clean]) order.push(clean);
         counts[clean] = (counts[clean] || 0) + 1;
       }
     });
     setScannedCounts(counts);
+    setScanOrder(order);
     showFeedback("info", "Reset barcodes to original packing list");
   };
 
   // Clear all scanned
   const handleClearAll = () => {
     setScannedCounts({});
+    setScanOrder([]);
     showFeedback("info", "Cleared all scanned barcodes");
   };
 
@@ -374,9 +414,6 @@ const BoxBarcodeScannerModal = ({
               <div>
                 <DialogTitle className="text-base sm:text-lg font-bold text-stone-900 flex items-center gap-2">
                   <span>Barcode Verification</span>
-                  <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-[#F5F2EB] text-[#543D2B] border border-stone-200/80">
-                    {formattedBoxTitle || `Box ${boxNumber}`}
-                  </span>
                 </DialogTitle>
                 <p className="text-xs text-stone-500 mt-0.5">
                   Scan all barcodes and verify quantities before saving.
@@ -630,9 +667,9 @@ const BoxBarcodeScannerModal = ({
               </div>
 
               {/* Scanned Items Scrollable List */}
-              <div className="flex-1 overflow-y-auto min-h-0 pr-1 space-y-2">
-                {Object.keys(scannedCounts).length > 0 ? (
-                  Object.entries(scannedCounts).map(([barcode, count], idx) => {
+              <div ref={scannedListRef} className="flex-1 overflow-y-auto min-h-0 pr-1 space-y-2">
+                {orderedScannedItems.length > 0 ? (
+                  orderedScannedItems.map(([barcode, count], idx) => {
                     const meta = getItemMeta(barcode);
                     const expected = meta.expectedQty;
                     const isMatched = count === expected && expected > 0;
@@ -643,7 +680,13 @@ const BoxBarcodeScannerModal = ({
                       <div
                         key={barcode}
                         className={`py-2 px-3 rounded-xl border transition-all flex items-center justify-between gap-2 ${
-                          isMatched
+                          idx === 0
+                            ? isMatched
+                              ? "bg-emerald-50/70 border-emerald-300 ring-1 ring-emerald-300/40"
+                              : isPartial
+                              ? "bg-amber-50/60 border-amber-300 ring-1 ring-amber-300/40"
+                              : "bg-blue-50/40 border-blue-300 ring-1 ring-blue-300/40"
+                            : isMatched
                             ? "bg-emerald-50/40 border-emerald-200/80 hover:border-emerald-300"
                             : isPartial
                             ? "bg-amber-50/30 border-amber-200/80 hover:border-amber-300"
@@ -651,7 +694,7 @@ const BoxBarcodeScannerModal = ({
                         }`}
                       >
                         {/* Left Side: Index, Barcode, and Actual Qty in one line */}
-                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1 flex-wrap sm:flex-nowrap">
                           <span className="text-[11px] font-bold text-stone-400 font-mono shrink-0">
                             #{idx + 1}
                           </span>
@@ -678,7 +721,7 @@ const BoxBarcodeScannerModal = ({
                           )}
                           {isExtra && (
                             <span
-                              className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#A27B5C] text-white shadow-2xs whitespace-nowrap"
+                              className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-600 text-white shadow-2xs whitespace-nowrap"
                               title={`Actual: ${expected}, Scanned: ${count}`}
                             >
                               <AlertTriangle className="h-3 w-3 text-white" />
@@ -690,7 +733,7 @@ const BoxBarcodeScannerModal = ({
                           <div
                             className={`flex items-center bg-white border rounded-lg shadow-2xs overflow-hidden h-7 ${
                               isExtra
-                                ? "border-[#A27B5C]/60"
+                                ? "border-blue-300"
                                 : isMatched
                                 ? "border-emerald-300"
                                 : "border-stone-200"
@@ -966,8 +1009,8 @@ const BoxBarcodeScannerModal = ({
                                 </span>
                               )}
                               {isExtra && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-[#F5F2EB] text-[#543D2B] border border-stone-200">
-                                  <AlertTriangle className="h-3 w-3 text-[#A27B5C]" />
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                                  <AlertTriangle className="h-3 w-3 text-blue-600" />
                                   +{item.diff} Extra (Actual: {item.expectedQty}, Scanned: {item.scannedQty})
                                 </span>
                               )}
