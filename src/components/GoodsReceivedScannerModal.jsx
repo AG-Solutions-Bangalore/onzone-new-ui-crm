@@ -157,6 +157,8 @@ export function GoodsReceivedScannerModal({ open, onOpenChange }) {
           orderReceivedStatus: order.work_order_rc_status,
           autoOpenBox: targetBox || null,
           singleBox: targetBox || null,
+          workOrderRow: order,
+          workOrderRcNo: order.work_order_rc_no,
         },
       }
     );

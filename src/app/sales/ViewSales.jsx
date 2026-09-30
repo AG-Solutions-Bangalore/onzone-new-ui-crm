@@ -4,7 +4,8 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import moment from "moment";
 import ReactToPrint from "react-to-print";
-import { Printer } from "lucide-react";
+import { Printer, FileSpreadsheet } from "lucide-react";
+import XLSX from "xlsx-js-style";
 import { Button } from "@/components/ui/button";
 
 import { useLocation, useNavigate, useParams } from "react-router-dom";
@@ -215,6 +216,8 @@ const ViewSales = () => {
         return {
           workOrder,
           workOrderSub: finalSub.length > 0 ? finalSub : enrichedSub,
+          workOrderSubRaw: enrichedSub,
+          rawResponse: response.data,
           workOrderFooter: response.data.workordersalesfooter || {},
           workOrderDataMin: response.data.closest_min_combo || "",
           workOrderDataMax: response.data.closest_max_combo || "",
@@ -233,7 +236,551 @@ const ViewSales = () => {
         />
       );
     }
-    const { workOrder = {}, workOrderSub = [], workOrderFooter = {} } = data || {};
+    const {
+      workOrder = {},
+      workOrderSub = [],
+      workOrderSubRaw = [],
+      rawResponse = {},
+      workOrderFooter = {},
+    } = data || {};
+
+    const downloadExcel = () => {
+      // 1. Resolve raw barcode items
+      let detailedItems = [];
+
+      // Check if workOrderSubRaw has items with barcodes
+      const hasBarcodesInRaw = (workOrderSubRaw || []).some(
+        (it) =>
+          it &&
+          (it.work_order_sa_sub_barcode ||
+            it.barcode ||
+            it.work_order_rc_sub_barcode ||
+            it.work_order_sub_barcode ||
+            it.t_code ||
+            it.item_code)
+      );
+
+      if (hasBarcodesInRaw) {
+        detailedItems = workOrderSubRaw;
+      } else {
+        // Look in rawResponse across all arrays
+        const allArrays = Object.values(rawResponse || {}).filter(Array.isArray);
+        const barcodeArray = allArrays.find((arr) =>
+          arr.some(
+            (it) =>
+              it &&
+              (it.work_order_sa_sub_barcode ||
+                it.barcode ||
+                it.work_order_rc_sub_barcode ||
+                it.work_order_sub_barcode ||
+                it.t_code ||
+                it.item_code)
+          )
+        );
+
+        if (barcodeArray && barcodeArray.length > 0) {
+          detailedItems = barcodeArray;
+        } else {
+          detailedItems =
+            workOrderSubRaw && workOrderSubRaw.length > 0
+              ? workOrderSubRaw
+              : workOrderSub;
+        }
+      }
+
+      // 2. Extract individual barcode rows
+      const extractedRows = [];
+
+      (detailedItems || []).forEach((item, index) => {
+        const rawBarcode =
+          item.work_order_sa_sub_barcode ||
+          item.barcode ||
+          item.work_order_rc_sub_barcode ||
+          item.work_order_sub_barcode ||
+          item.t_code ||
+          item.item_code ||
+          "";
+
+        let brand =
+          item.work_order_sub_brand ||
+          item.brand ||
+          item.brand_name ||
+          item.work_order_sa_brand ||
+          workOrder.work_order_sa_brand ||
+          workOrder.brand_name ||
+          "N/A";
+
+        let price =
+          item.finished_stock_amount !== undefined &&
+          item.finished_stock_amount !== null &&
+          item.finished_stock_amount !== ""
+            ? item.finished_stock_amount
+            : item.mrp ||
+              item.amount ||
+              item.rate ||
+              item.price ||
+              workOrder.finished_stock_amount ||
+              workOrder.amount ||
+              workOrder.mrp ||
+              "-";
+
+        const pcs = Number(
+          item.count !== undefined && item.count !== null
+            ? item.count
+            : item.pcs || item.quantity || 1
+        );
+
+        // Fallback: If price is missing for this barcode, look up from workOrderSubRaw
+        if (price === "-" || price === undefined || price === null || price === "") {
+          const match = (workOrderSubRaw || []).find(
+            (sub) =>
+              sub &&
+              ((sub.work_order_sa_sub_barcode &&
+                sub.work_order_sa_sub_barcode === rawBarcode) ||
+                (sub.barcode && sub.barcode === rawBarcode)) &&
+              sub.finished_stock_amount &&
+              sub.finished_stock_amount !== "-"
+          );
+          if (match) {
+            price = match.finished_stock_amount || match.mrp || match.amount || price;
+            brand = match.brand || match.work_order_sub_brand || brand;
+          }
+        }
+
+        if (
+          rawBarcode &&
+          typeof rawBarcode === "string" &&
+          rawBarcode.includes(",")
+        ) {
+          const codes = rawBarcode
+            .split(",")
+            .map((c) => c.trim())
+            .filter(Boolean);
+          codes.forEach((code) => {
+            extractedRows.push({
+              barcode: code,
+              brand,
+              price,
+              quantity: 1,
+            });
+          });
+        } else {
+          extractedRows.push({
+            barcode: rawBarcode || `Item ${index + 1}`,
+            brand,
+            price,
+            quantity: pcs,
+          });
+        }
+      });
+
+      // 3. Group by barcode and price
+      const barcodeMap = new Map();
+      extractedRows.forEach((row) => {
+        const key = `${row.barcode}___${row.price}`;
+        if (barcodeMap.has(key)) {
+          const existing = barcodeMap.get(key);
+          existing.quantity += row.quantity;
+        } else {
+          barcodeMap.set(key, { ...row });
+        }
+      });
+
+      const finalBarcodeRows = Array.from(barcodeMap.values());
+
+      // ==========================================
+      // STYLING PALETTE & HELPERS
+      // ==========================================
+      const borderThin = {
+        top: { style: "thin", color: { rgb: "D8D0C5" } },
+        bottom: { style: "thin", color: { rgb: "D8D0C5" } },
+        left: { style: "thin", color: { rgb: "D8D0C5" } },
+        right: { style: "thin", color: { rgb: "D8D0C5" } },
+      };
+
+      const borderTotal = {
+        top: { style: "medium", color: { rgb: "543D2B" } },
+        bottom: { style: "double", color: { rgb: "543D2B" } },
+        left: { style: "thin", color: { rgb: "D8D0C5" } },
+        right: { style: "thin", color: { rgb: "D8D0C5" } },
+      };
+
+      const titleStyle = {
+        font: { name: "Segoe UI", sz: 14, bold: true, color: { rgb: "FFFFFF" } },
+        fill: { fgColor: { rgb: "543D2B" } },
+        alignment: { horizontal: "center", vertical: "center" },
+      };
+
+      const subtitleStyle = {
+        font: { name: "Segoe UI", sz: 9, bold: true, color: { rgb: "543D2B" } },
+        fill: { fgColor: { rgb: "E5D7C3" } },
+        alignment: { horizontal: "center", vertical: "center" },
+      };
+
+      const infoLabelStyle = {
+        font: { name: "Segoe UI", sz: 10, bold: true, color: { rgb: "543D2B" } },
+        fill: { fgColor: { rgb: "E5D7C3" } },
+        alignment: { horizontal: "center", vertical: "center" },
+        border: borderThin,
+      };
+
+      const infoValStyle = (align = "left", bold = false) => ({
+        font: { name: "Segoe UI", sz: 10, bold, color: { rgb: "1C1917" } },
+        fill: { fgColor: { rgb: "F7F4EF" } },
+        alignment: { horizontal: align, vertical: "center" },
+        border: borderThin,
+      });
+
+      const thStyle = {
+        font: { name: "Segoe UI", sz: 11, bold: true, color: { rgb: "FFFFFF" } },
+        fill: { fgColor: { rgb: "543D2B" } },
+        alignment: { horizontal: "center", vertical: "center" },
+        border: borderThin,
+      };
+
+      const dataCellStyle = (isEven, align = "center", bold = false) => ({
+        font: { name: "Segoe UI", sz: 10, bold, color: { rgb: "1C1917" } },
+        fill: { fgColor: { rgb: isEven ? "FFFFFF" : "FAF8F5" } },
+        alignment: { horizontal: align, vertical: "center" },
+        border: borderThin,
+      });
+
+      const setCell = (ws, r, c, val, style, isNum = false) => {
+        const ref = XLSX.utils.encode_cell({ r, c });
+        ws[ref] = {
+          v: val ?? "",
+          t: isNum || (typeof val === "number" && !isNaN(val)) ? "n" : "s",
+          s: style || {},
+        };
+      };
+
+      // ==========================================
+      // SHEET 1: BARCODE DETAILS
+      // ==========================================
+      const wsDetail = {};
+      const detailMerges = [];
+      const detailRows = [];
+
+      // Row 0: Title Banner
+      detailRows.push({ hpt: 30 });
+      detailMerges.push({ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } });
+      for (let c = 0; c <= 4; c++) {
+        setCell(wsDetail, 0, c, c === 0 ? "SALES PACKING LIST" : "", titleStyle);
+      }
+
+      // Row 1: Subtitle
+      detailRows.push({ hpt: 18 });
+      detailMerges.push({ s: { r: 1, c: 0 }, e: { r: 1, c: 4 } });
+      for (let c = 0; c <= 4; c++) {
+        setCell(wsDetail, 1, c, c === 0 ? "GARMENT T-CODE / BARCODE BREAKDOWN" : "", subtitleStyle);
+      }
+
+      // Row 2: Spacer
+      detailRows.push({ hpt: 8 });
+
+      // Row 3: Info Row 1 (Name & Ref Number)
+      detailRows.push({ hpt: 22 });
+      setCell(wsDetail, 3, 0, "Retailer Name", infoLabelStyle);
+      setCell(wsDetail, 3, 1, workOrder.work_order_sa_retailer_name || "N/A", infoValStyle("left", true));
+      setCell(wsDetail, 3, 2, "", infoValStyle());
+      setCell(wsDetail, 3, 3, "Ref Number", infoLabelStyle);
+      setCell(wsDetail, 3, 4, workOrder.work_order_sa_ref || "-", infoValStyle("center", true));
+
+      // Row 4: Info Row 2 (Code & Date)
+      detailRows.push({ hpt: 22 });
+      setCell(wsDetail, 4, 0, "Company Code", infoLabelStyle);
+      setCell(wsDetail, 4, 1, workOrder.company_code || "-", infoValStyle("left"));
+      setCell(wsDetail, 4, 2, "", infoValStyle());
+      setCell(wsDetail, 4, 3, "Date", infoLabelStyle);
+      setCell(
+        wsDetail,
+        4,
+        4,
+        workOrder.work_order_sa_date
+          ? moment(workOrder.work_order_sa_date).format("DD/MM/YYYY")
+          : "-",
+        infoValStyle("center")
+      );
+
+      // Row 5: Spacer
+      detailRows.push({ hpt: 10 });
+
+      // Row 6: Table Headers
+      detailRows.push({ hpt: 24 });
+      const detailHeaders = ["S.No", "Barcode (T-Code)", "Brand", "Price (₹)", "Quantity"];
+      detailHeaders.forEach((header, c) => {
+        setCell(wsDetail, 6, c, header, thStyle);
+      });
+
+      // Data Rows starting at index 7
+      let totalBarcodeQty = 0;
+      let currRow = 7;
+
+      finalBarcodeRows.forEach((row, idx) => {
+        const isEven = idx % 2 === 0;
+        const q = Number(row.quantity || 0);
+        totalBarcodeQty += q;
+
+        detailRows.push({ hpt: 20 });
+        setCell(wsDetail, currRow, 0, idx + 1, dataCellStyle(isEven, "center"), true);
+        setCell(wsDetail, currRow, 1, row.barcode, dataCellStyle(isEven, "center", true));
+        setCell(wsDetail, currRow, 2, row.brand, dataCellStyle(isEven, "center"));
+        const numericPrice = parseFloat(row.price);
+        const isPriceNum = !isNaN(numericPrice);
+        setCell(
+          wsDetail,
+          currRow,
+          3,
+          isPriceNum ? numericPrice : row.price,
+          dataCellStyle(isEven, "right", true),
+          isPriceNum
+        );
+        setCell(wsDetail, currRow, 4, q, dataCellStyle(isEven, "center", true), true);
+
+        currRow++;
+      });
+
+      // Total Pieces Row
+      detailRows.push({ hpt: 24 });
+      detailMerges.push({ s: { r: currRow, c: 0 }, e: { r: currRow, c: 3 } });
+      const totalPiecesCount =
+        totalBarcodeQty ||
+        Number(workOrderFooter.total_received) ||
+        Number(workOrder.work_order_sa_pcs) ||
+        0;
+
+      for (let c = 0; c <= 3; c++) {
+        setCell(
+          wsDetail,
+          currRow,
+          c,
+          c === 0 ? "TOTAL PIECES:" : "",
+          {
+            font: { name: "Segoe UI", sz: 11, bold: true, color: { rgb: "543D2B" } },
+            fill: { fgColor: { rgb: "E5D7C3" } },
+            alignment: { horizontal: "right", vertical: "center" },
+            border: borderTotal,
+          }
+        );
+      }
+      setCell(
+        wsDetail,
+        currRow,
+        4,
+        totalPiecesCount,
+        {
+          font: { name: "Segoe UI", sz: 12, bold: true, color: { rgb: "FFFFFF" } },
+          fill: { fgColor: { rgb: "543D2B" } },
+          alignment: { horizontal: "center", vertical: "center" },
+          border: borderTotal,
+        },
+        true
+      );
+      currRow++;
+
+      // Remarks Row
+      detailRows.push({ hpt: 22 });
+      detailMerges.push({ s: { r: currRow, c: 1 }, e: { r: currRow, c: 4 } });
+      setCell(wsDetail, currRow, 0, "Remarks", infoLabelStyle);
+      const remarksText = workOrder.work_order_sa_remarks || "No additional remarks";
+      for (let c = 1; c <= 4; c++) {
+        setCell(
+          wsDetail,
+          currRow,
+          c,
+          c === 1 ? remarksText : "",
+          {
+            font: { name: "Segoe UI", sz: 10, italic: true, color: { rgb: "44403C" } },
+            fill: { fgColor: { rgb: "FAF8F5" } },
+            alignment: { horizontal: "left", vertical: "center" },
+            border: borderThin,
+          }
+        );
+      }
+
+      wsDetail["!ref"] = XLSX.utils.encode_range({
+        s: { r: 0, c: 0 },
+        e: { r: currRow, c: 4 },
+      });
+      wsDetail["!merges"] = detailMerges;
+      wsDetail["!rows"] = detailRows;
+      wsDetail["!cols"] = [
+        { wch: 8 },  // S.No
+        { wch: 22 }, // Barcode
+        { wch: 20 }, // Brand
+        { wch: 18 }, // Price (₹)
+        { wch: 16 }, // Quantity
+      ];
+
+      // ==========================================
+      // SHEET 2: SUMMARY SHEET
+      // ==========================================
+      const wsSummary = {};
+      const summaryMerges = [];
+      const summaryRows = [];
+
+      // Row 0: Title Banner
+      summaryRows.push({ hpt: 30 });
+      summaryMerges.push({ s: { r: 0, c: 0 }, e: { r: 0, c: 2 } });
+      for (let c = 0; c <= 2; c++) {
+        setCell(wsSummary, 0, c, c === 0 ? "SALES PACKING LIST" : "", titleStyle);
+      }
+
+      // Row 1: Subtitle
+      summaryRows.push({ hpt: 18 });
+      summaryMerges.push({ s: { r: 1, c: 0 }, e: { r: 1, c: 2 } });
+      for (let c = 0; c <= 2; c++) {
+        setCell(wsSummary, 1, c, c === 0 ? "BRAND & MRP SUMMARY OVERVIEW" : "", subtitleStyle);
+      }
+
+      // Row 2: Spacer
+      summaryRows.push({ hpt: 8 });
+
+      // Row 3-4: Info Rows
+      summaryRows.push({ hpt: 22 });
+      setCell(wsSummary, 3, 0, "Retailer Name", infoLabelStyle);
+      setCell(wsSummary, 3, 1, workOrder.work_order_sa_retailer_name || "N/A", infoValStyle("left", true));
+      setCell(wsSummary, 3, 2, workOrder.work_order_sa_ref || "-", infoValStyle("center", true));
+
+      summaryRows.push({ hpt: 22 });
+      setCell(wsSummary, 4, 0, "Company Code", infoLabelStyle);
+      setCell(wsSummary, 4, 1, workOrder.company_code || "-", infoValStyle("left"));
+      setCell(
+        wsSummary,
+        4,
+        2,
+        workOrder.work_order_sa_date
+          ? moment(workOrder.work_order_sa_date).format("DD/MM/YYYY")
+          : "-",
+        infoValStyle("center")
+      );
+
+      // Row 5: Spacer
+      summaryRows.push({ hpt: 10 });
+
+      // Row 6: Summary Table Header
+      summaryRows.push({ hpt: 24 });
+      const sumHeaders = ["Brand", "MRP (₹)", "No of Pieces"];
+      sumHeaders.forEach((header, c) => {
+        setCell(wsSummary, 6, c, header, thStyle);
+      });
+
+      let sumRow = 7;
+      (workOrderSub || []).forEach((item, idx) => {
+        const isEven = idx % 2 === 0;
+        const brand =
+          item.work_order_sub_brand ||
+          item.brand ||
+          item.brand_name ||
+          item.work_order_sa_brand ||
+          workOrder.work_order_sa_brand ||
+          workOrder.brand_name ||
+          "N/A";
+        const rawMrp =
+          item.finished_stock_amount !== undefined &&
+          item.finished_stock_amount !== null &&
+          item.finished_stock_amount !== ""
+            ? item.finished_stock_amount
+            : item.mrp || item.amount || "-";
+        const count = Number(
+          item.count !== undefined && item.count !== null
+            ? item.count
+            : item.pcs || 1
+        );
+
+        summaryRows.push({ hpt: 20 });
+        setCell(wsSummary, sumRow, 0, brand, dataCellStyle(isEven, "center"));
+        const numMrp = parseFloat(rawMrp);
+        const isNumMrp = !isNaN(numMrp);
+        setCell(
+          wsSummary,
+          sumRow,
+          1,
+          isNumMrp ? numMrp : rawMrp,
+          dataCellStyle(isEven, "right", true),
+          isNumMrp
+        );
+        setCell(wsSummary, sumRow, 2, count, dataCellStyle(isEven, "center", true), true);
+
+        sumRow++;
+      });
+
+      // Total Pieces Row
+      summaryRows.push({ hpt: 24 });
+      summaryMerges.push({ s: { r: sumRow, c: 0 }, e: { r: sumRow, c: 1 } });
+      for (let c = 0; c <= 1; c++) {
+        setCell(
+          wsSummary,
+          sumRow,
+          c,
+          c === 0 ? "TOTAL PIECES:" : "",
+          {
+            font: { name: "Segoe UI", sz: 11, bold: true, color: { rgb: "543D2B" } },
+            fill: { fgColor: { rgb: "E5D7C3" } },
+            alignment: { horizontal: "right", vertical: "center" },
+            border: borderTotal,
+          }
+        );
+      }
+      setCell(
+        wsSummary,
+        sumRow,
+        2,
+        totalPiecesCount,
+        {
+          font: { name: "Segoe UI", sz: 12, bold: true, color: { rgb: "FFFFFF" } },
+          fill: { fgColor: { rgb: "543D2B" } },
+          alignment: { horizontal: "center", vertical: "center" },
+          border: borderTotal,
+        },
+        true
+      );
+      sumRow++;
+
+      // Remarks Row
+      summaryRows.push({ hpt: 22 });
+      summaryMerges.push({ s: { r: sumRow, c: 1 }, e: { r: sumRow, c: 2 } });
+      setCell(wsSummary, sumRow, 0, "Remarks", infoLabelStyle);
+      for (let c = 1; c <= 2; c++) {
+        setCell(
+          wsSummary,
+          sumRow,
+          c,
+          c === 1 ? remarksText : "",
+          {
+            font: { name: "Segoe UI", sz: 10, italic: true, color: { rgb: "44403C" } },
+            fill: { fgColor: { rgb: "FAF8F5" } },
+            alignment: { horizontal: "left", vertical: "center" },
+            border: borderThin,
+          }
+        );
+      }
+
+      wsSummary["!ref"] = XLSX.utils.encode_range({
+        s: { r: 0, c: 0 },
+        e: { r: sumRow, c: 2 },
+      });
+      wsSummary["!merges"] = summaryMerges;
+      wsSummary["!rows"] = summaryRows;
+      wsSummary["!cols"] = [
+        { wch: 25 },
+        { wch: 20 },
+        { wch: 18 },
+      ];
+
+      // ==========================================
+      // CREATE WORKBOOK & TRIGGER DOWNLOAD
+      // ==========================================
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, wsDetail, "Barcode Details");
+      XLSX.utils.book_append_sheet(wb, wsSummary, "Summary");
+
+      const cleanRef = (workOrder.work_order_sa_ref || "sales_packing")
+        .toString()
+        .replace(/[/\\?%*:|"<>]/g, "-");
+      const fileName = `Sales_Packing_List_Detailed_${cleanRef}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+    };
   
    
   
@@ -248,18 +795,29 @@ const ViewSales = () => {
                         Sales Packing List View
                       </CardTitle>
                     </div>
-                    
-                    <ReactToPrint
-                      trigger={() => (
-                        <Button variant="outline" size="sm" asChild>
-                          <div className="flex items-center gap-2 cursor-pointer bg-white hover:bg-stone-50 border-stone-200 text-stone-700 font-semibold rounded-xl ml-4">
-                            <Printer className="h-4 w-4 text-[#543D2B]" />
-                            Print
-                          </div>
-                        </Button>
-                      )}
-                      content={() => componentRef.current}
-                    />
+
+                    <div className="flex items-center gap-3 ml-4">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={downloadExcel}
+                        className="flex items-center gap-2 cursor-pointer bg-white hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-800 border-stone-200 text-stone-700 font-semibold rounded-xl"
+                      >
+                        <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+                        Download Excel
+                      </Button>
+                      <ReactToPrint
+                        trigger={() => (
+                          <Button variant="outline" size="sm" asChild>
+                            <div className="flex items-center gap-2 cursor-pointer bg-white hover:bg-stone-50 border-stone-200 text-stone-700 font-semibold rounded-xl">
+                              <Printer className="h-4 w-4 text-[#543D2B]" />
+                              Print
+                            </div>
+                          </Button>
+                        )}
+                        content={() => componentRef.current}
+                      />
+                    </div>
                   </div>
                 </CardHeader>
      
@@ -391,6 +949,16 @@ const ViewSales = () => {
                           {workOrder.work_order_sa_remarks ||
                             "No additional remarks"}
                         </span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={downloadExcel}
+                          className="print:hidden flex items-center gap-2 cursor-pointer bg-white hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-800 border-stone-200 text-stone-700 font-semibold rounded-xl shadow-2xs h-8 px-3 text-xs transition-all"
+                        >
+                          <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+                          Download Excel
+                        </Button>
                       </div>
                     </div>
 

@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect, useMemo } from "react";
 import Page from "../dashboard/page";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import moment from "moment";
 import * as XLSX from "xlsx";
@@ -74,11 +74,12 @@ const DcReceiptReceived = () => {
   const hasAutoClosedRef = useRef(false);
   const [barcodeFilter, setBarcodeFilter] = useState("all");
   const location = useLocation();
+  const queryClient = useQueryClient();
 
   const [checkedBoxes, setCheckedBoxes] = useState(new Set());
   const [expandedBoxes, setExpandedBoxes] = useState(new Set());
 
-  const { orderReceivedStatus } = location.state || {};
+  const { orderReceivedStatus, workOrderRow, workOrderRcNo } = location.state || {};
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["dcreceipt", id],
@@ -99,6 +100,48 @@ const DcReceiptReceived = () => {
   });
 
   const { workOrder = {}, workOrderSub = [] } = data || {};
+
+  // Look up work_order_rc_no from multiple reliable sources:
+  // 1. workOrder returned by the API
+  // 2. React Router navigation state (workOrderRcNo or workOrderRow.work_order_rc_no)
+  // 3. React Query cached "workorderrc" list
+  // 4. Fallback fetch of work order list if needed
+  const cachedList = queryClient.getQueryData(["workorderrc"]) || [];
+  const cachedOrder = Array.isArray(cachedList)
+    ? cachedList.find((item) => String(item.id) === String(id))
+    : null;
+
+  const { data: listData } = useQuery({
+    queryKey: ["workorderrc"],
+    queryFn: async () => {
+      const token = localStorage.getItem("token");
+      const res = await axios.get(
+        `${BASE_URL}/api/fetch-work-order-received-list`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      return res.data.workorderrc || [];
+    },
+    enabled:
+      !workOrder?.work_order_rc_no &&
+      !workOrderRcNo &&
+      !workOrderRow?.work_order_rc_no &&
+      !cachedOrder?.work_order_rc_no,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const listOrder = Array.isArray(listData)
+    ? listData.find((item) => String(item.id) === String(id))
+    : null;
+
+  const displayWorkOrderNo =
+    workOrder?.work_order_rc_no ||
+    workOrderRcNo ||
+    workOrderRow?.work_order_rc_no ||
+    cachedOrder?.work_order_rc_no ||
+    listOrder?.work_order_rc_no ||
+    workOrder?.work_order_no ||
+    workOrder?.work_order_rc_dc_no ||
+    "-";
 
   const isOrderReceived =
     orderReceivedStatus?.toLowerCase() === "received" ||
@@ -974,9 +1017,9 @@ const DcReceiptReceived = () => {
                 <div className="flex items-center gap-4 flex-wrap">
                   <CardTitle className="text-lg font-semibold flex items-center gap-2">
                     <span>Packing Receipt</span>
-                    {workOrder.work_order_rc_no && (
+                    {displayWorkOrderNo && displayWorkOrderNo !== "-" && (
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-bold bg-[#A27B5C] text-white shadow-2xs">
-                        REC/OZ/{workOrder.work_order_rc_no}
+                        REC/OZ/{displayWorkOrderNo}
                       </span>
                     )}
                   </CardTitle>
@@ -1096,86 +1139,72 @@ const DcReceiptReceived = () => {
             <div className="p-4 bg-white print-hidden-custom">
               <table className="w-full border-collapse text-sm">
                 <tbody>
+                  {/* Line 1: Factory | Brand | RC No | Date */}
                   <tr className="border-t border-l border-r border-black">
-                    <td className="font-semibold p-1 w-[8rem] border-r">
+                    <td className="font-semibold p-1.5 w-[7rem] border-r">
                       Factory
                     </td>
-                    <td className="p-1 w-[16rem] border-r">
+                    <td className="p-1.5 w-[14rem] border-r">
                       : {workOrder.work_order_rc_factory}
                     </td>
-                    <td className="font-semibold p-1 w-[6rem] text-right border-r">
+                    <td className="font-semibold p-1.5 w-[5.5rem] text-right border-r">
+                      Brand
+                    </td>
+                    <td className="p-1.5 w-[10rem] border-r">
+                      : {workOrder.work_order_rc_brand}
+                    </td>
+                    <td className="font-semibold p-1.5 w-[5.5rem] text-right border-r">
                       RC No
                     </td>
-                    <td className="p-1 w-[8rem] border-r font-bold text-stone-900">
-                      : {workOrder.work_order_rc_no ? `REC/OZ/${workOrder.work_order_rc_no}` : "-"}
+                    <td className="p-1.5 w-[9rem] border-r font-bold text-stone-900">
+                      : {displayWorkOrderNo && displayWorkOrderNo !== "-" ? `REC/OZ/${displayWorkOrderNo}` : "-"}
                     </td>
-                    <td className="font-semibold p-1 w-[6rem] text-right border-r">
+                    <td className="font-semibold p-1.5 w-[5rem] text-right border-r">
                       Date
                     </td>
-                    <td className="p-1 w-[8rem]">
+                    <td className="p-1.5 w-[9rem]">
                       :{" "}
                       {moment(workOrder.work_order_rc_date).format(
                         "DD-MM-YYYY",
                       )}
                     </td>
                   </tr>
-                  <tr className="border-l border-r border-black">
-                    <td className="font-semibold p-1 w-[8rem] border-r">
-                      Brand
-                    </td>
-                    <td className="p-1 w-[16rem] border-r">
-                      : {workOrder.work_order_rc_brand}
-                    </td>
-                    <td className="font-semibold p-1 w-[6rem] text-right border-r">
-                      Packing No
-                    </td>
-                    <td className="p-1 w-[8rem]">
-                      : {workOrder.work_order_rc_dc_no}
-                    </td>
-                    <td className="font-semibold p-1 w-[6rem] text-right border-r">
-                      Packing Date
-                    </td>
-                    <td className="p-1 w-[8rem]">
-                      :{" "}
-                      {moment(workOrder.work_order_rc_dc_date).format(
-                        "DD-MM-YYYY",
-                      )}
-                    </td>
-                  </tr>
-                  <tr className="border-l border-r border-black">
-                    <td className="font-semibold p-1 w-[8rem] border-r">
-                      No of Box
-                    </td>
-                    <td className="p-1 w-[16rem] border-r">
-                      : {workOrder.work_order_rc_box}
-                    </td>
-                    <td className="font-semibold p-1 w-[6rem] text-right border-r">
-                      Total Pcs
-                    </td>
-                    <td className="p-1 w-[8rem] border-r">
-                      : {workOrder.work_order_rc_pcs}
-                    </td>
-                    <td className="font-semibold p-1 w-[6rem] text-right border-r">
-                      Received By
-                    </td>
-                    <td className="p-1 w-[8rem]">
-                      : {workOrder.work_order_rc_received_by}
-                    </td>
-                  </tr>
+
+                  {/* Line 2: Work Order Ref | No of Box | Total Pcs | Remarks */}
                   <tr className="border-l border-r border-b border-black">
-                    <td className="font-semibold p-1 w-[8rem] border-r">
+                    <td className="font-semibold p-1.5 w-[7rem] border-r">
                       Work Order Ref
                     </td>
-                    <td className="p-1 w-[16rem] border-r">
+                    <td className="p-1.5 w-[14rem] border-r">
                       : {workOrder.work_order_rc_id}
                     </td>
-                    <td className="font-semibold p-1 w-[6rem] text-right border-r">
+                    <td className="font-semibold p-1.5 w-[5.5rem] text-right border-r">
+                      No of Box
+                    </td>
+                    <td className="p-1.5 w-[10rem] border-r">
+                      : {workOrder.work_order_rc_box}
+                    </td>
+                    <td className="font-semibold p-1.5 w-[5.5rem] text-right border-r">
+                      Total Pcs
+                    </td>
+                    <td className="p-1.5 w-[9rem] border-r">
+                      : {workOrder.work_order_rc_pcs}
+                    </td>
+                    <td className="font-semibold p-1.5 w-[5rem] text-right border-r">
                       Remarks
                     </td>
-                    <td colSpan="3" className="p-1 break-words">
-                      : {workOrder.work_order_rc_remarks}
+                    <td className="p-1.5 w-[9rem] break-words">
+                      : {workOrder.work_order_rc_remarks || "-"}
                     </td>
                   </tr>
+
+                  {/* Commented out as requested: Work Order No, Packing Date, Received By
+                  <tr>
+                    <td>Work Order No: {displayWorkOrderNo}</td>
+                    <td>Packing Date: {moment(workOrder.work_order_rc_dc_date).format("DD-MM-YYYY")}</td>
+                    <td>Received By: {workOrder.work_order_rc_received_by}</td>
+                  </tr>
+                  */}
                 </tbody>
               </table>
             </div>
@@ -1265,84 +1294,62 @@ const DcReceiptReceived = () => {
                         {/* Header Table for print only - shows before every box in print */}
                         <table className="w-full mb-4 border-collapse text-sm print-visible-table-custom">
                           <tbody>
+                            {/* Line 1: Factory | Brand | RC No | Date */}
                             <tr className="border-t border-l border-r border-black">
-                              <td className="font-semibold p-1 w-[8rem] border-r">
+                              <td className="font-semibold p-1.5 w-[7rem] border-r">
                                 Factory
                               </td>
-                              <td className="p-1 w-[16rem] border-r">
+                              <td className="p-1.5 w-[14rem] border-r">
                                 : {workOrder.work_order_rc_factory}
                               </td>
-                              <td className="font-semibold p-1 w-[6rem] text-right border-r">
+                              <td className="font-semibold p-1.5 w-[5.5rem] text-right border-r">
+                                Brand
+                              </td>
+                              <td className="p-1.5 w-[10rem] border-r">
+                                : {workOrder.work_order_rc_brand}
+                              </td>
+                              <td className="font-semibold p-1.5 w-[5.5rem] text-right border-r">
                                 RC No
                               </td>
-                              <td className="p-1 w-[8rem] border-r font-bold">
-                                : {workOrder.work_order_rc_no ? `REC/OZ/${workOrder.work_order_rc_no}` : "-"}
+                              <td className="p-1.5 w-[9rem] border-r font-bold">
+                                : {displayWorkOrderNo && displayWorkOrderNo !== "-" ? `REC/OZ/${displayWorkOrderNo}` : "-"}
                               </td>
-                              <td className="font-semibold p-1 w-[6rem] text-right border-r">
+                              <td className="font-semibold p-1.5 w-[5rem] text-right border-r">
                                 Date
                               </td>
-                              <td className="p-1 w-[8rem]">
+                              <td className="p-1.5 w-[9rem]">
                                 :{" "}
                                 {moment(workOrder.work_order_rc_date).format(
                                   "DD-MM-YYYY",
                                 )}
                               </td>
                             </tr>
-                            <tr className="border-l border-r border-black">
-                              <td className="font-semibold p-1 w-[8rem] border-r">
-                                Brand
-                              </td>
-                              <td className="p-1 w-[16rem] border-r">
-                                : {workOrder.work_order_rc_brand}
-                              </td>
-                              <td className="font-semibold p-1 w-[6rem] text-right border-r">
-                                Packing No
-                              </td>
-                              <td className="p-1 w-[8rem]">
-                                : {workOrder.work_order_rc_dc_no}
-                              </td>
-                              <td className="font-semibold p-1 w-[6rem] text-right border-r">
-                                Packing Date
-                              </td>
-                              <td className="p-1 w-[8rem]">
-                                :{" "}
-                                {moment(workOrder.work_order_rc_dc_date).format(
-                                  "DD-MM-YYYY",
-                                )}
-                              </td>
-                            </tr>
-                            <tr className="border-l border-r border-black">
-                              <td className="font-semibold p-1 w-[8rem] border-r">
-                                No of Box
-                              </td>
-                              <td className="p-1 w-[16rem] border-r">
-                                : {workOrder.work_order_rc_box}
-                              </td>
-                              <td className="font-semibold p-1 w-[6rem] text-right border-r">
-                                Total Pcs
-                              </td>
-                              <td className="p-1 w-[8rem]">
-                                : {workOrder.work_order_rc_pcs}
-                              </td>
-                              <td className="font-semibold p-1 w-[6rem] text-right border-r">
-                                Received By
-                              </td>
-                              <td className="p-1 w-[8rem]">
-                                : {workOrder.work_order_rc_received_by}
-                              </td>
-                            </tr>
+
+                            {/* Line 2: Work Order Ref | No of Box | Total Pcs | Remarks */}
                             <tr className="border-l border-r border-b border-black">
-                              <td className="font-semibold p-1 w-[8rem] border-r">
+                              <td className="font-semibold p-1.5 w-[7rem] border-r">
                                 Work Order Ref
                               </td>
-                              <td className="p-1 w-[16rem] border-r">
+                              <td className="p-1.5 w-[14rem] border-r">
                                 : {workOrder.work_order_rc_id}
                               </td>
-                              <td className="font-semibold p-1 w-[6rem] text-right border-r">
+                              <td className="font-semibold p-1.5 w-[5.5rem] text-right border-r">
+                                No of Box
+                              </td>
+                              <td className="p-1.5 w-[10rem] border-r">
+                                : {workOrder.work_order_rc_box}
+                              </td>
+                              <td className="font-semibold p-1.5 w-[5.5rem] text-right border-r">
+                                Total Pcs
+                              </td>
+                              <td className="p-1.5 w-[9rem] border-r">
+                                : {workOrder.work_order_rc_pcs}
+                              </td>
+                              <td className="font-semibold p-1.5 w-[5rem] text-right border-r">
                                 Remarks
                               </td>
-                              <td colSpan="3" className="p-1 break-words">
-                                : {workOrder.work_order_rc_remarks}
+                              <td className="p-1.5 w-[9rem] break-words">
+                                : {workOrder.work_order_rc_remarks || "-"}
                               </td>
                             </tr>
                           </tbody>
@@ -1386,8 +1393,8 @@ const DcReceiptReceived = () => {
                                   )}
 
                                   {breakdown.isVerified && breakdown.extra > 0 && breakdown.missing === 0 && (
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-md bg-amber-50 text-amber-800 border border-amber-300">
-                                      <PlusCircle className="h-3 w-3 text-amber-600" />
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-md bg-blue-50 text-blue-800 border border-blue-300">
+                                      <PlusCircle className="h-3 w-3 text-blue-600" />
                                       Extra Added (+{breakdown.extra})
                                     </span>
                                   )}
@@ -1418,7 +1425,7 @@ const DcReceiptReceived = () => {
                               className="h-7 text-xs font-semibold bg-white hover:bg-stone-50 border-stone-200 text-stone-700 rounded-lg px-2.5 flex items-center gap-1.5 shadow-2xs cursor-pointer transition-colors"
                             >
                               <Barcode className="h-3.5 w-3.5 text-[#543D2B]" />
-                              Check / Manage Barcodes
+                              Check Barcodes
                             </Button>
 
                             {/* Show / Hide Details Button */}
@@ -1500,8 +1507,8 @@ const DcReceiptReceived = () => {
                                                 Missing: {expectedQty - scannedQty} (Matched: {scannedQty}/{expectedQty})
                                               </span>
                                             ) : (
-                                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-300">
-                                                <PlusCircle className="w-3 h-3 text-amber-600" />
+                                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-blue-50 text-blue-800 border border-blue-300">
+                                                <PlusCircle className="w-3 h-3 text-blue-600" />
                                                 Extra Added (+{scannedQty - expectedQty})
                                               </span>
                                             )}
@@ -1529,13 +1536,13 @@ const DcReceiptReceived = () => {
                                             !rows.some((r) => r.barcode === item.barcode)
                                         )
                                         .map((extraItem, eIdx) => (
-                                          <tr key={`extra-${eIdx}`} className="bg-amber-50/40 hover:bg-amber-50/70 transition-colors">
-                                            <td className="border-stone-200 print:border p-2 print:p-1 font-mono font-semibold text-amber-900 text-xs">
+                                          <tr key={`extra-${eIdx}`} className="bg-blue-50/40 hover:bg-blue-50/70 transition-colors">
+                                            <td className="border-stone-200 print:border p-2 print:p-1 font-mono font-semibold text-blue-950 text-xs">
                                               {extraItem.barcode}
                                             </td>
                                             <td className="border-stone-200 print:border p-2 print:p-1 text-center text-xs">
-                                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-amber-100 text-amber-900 border border-amber-300">
-                                                <PlusCircle className="w-3 h-3 text-amber-700" />
+                                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-blue-50 text-blue-800 border border-blue-300">
+                                                <PlusCircle className="w-3 h-3 text-blue-600" />
                                                 Extra Added (+{extraItem.scannedQty})
                                               </span>
                                             </td>
@@ -1545,7 +1552,7 @@ const DcReceiptReceived = () => {
                                             <td className="border-stone-200 print:border p-2 print:p-1 text-center font-mono text-stone-500 text-xs">
                                               {extraItem.amount || "-"}
                                             </td>
-                                            <td className="border-stone-200 print:border p-2 print:p-1 text-right font-bold text-amber-900 text-xs">
+                                            <td className="border-stone-200 print:border p-2 print:p-1 text-right font-bold text-blue-950 text-xs">
                                               {extraItem.scannedQty}
                                             </td>
                                           </tr>

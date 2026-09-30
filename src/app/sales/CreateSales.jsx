@@ -750,8 +750,8 @@ const CreateSales = () => {
 
                       return (
                         <div className="flex items-center flex-wrap gap-1.5">
-                          <span className="bg-[#E5D7C3]/70 text-[#543D2B] px-2.5 py-0.5 rounded-md font-bold border border-[#D8C7B0]">
-                            <strong className="text-stone-800">Matched:</strong> {displayMatched}
+                          <span className="bg-green-50 text-green-700 px-2.5 py-0.5 rounded-md font-bold border border-green-200">
+                            <strong className="text-green-800">Matched:</strong> {displayMatched}
                           </span>
                         </div>
                       );
@@ -774,11 +774,11 @@ const CreateSales = () => {
 
                     return (
                       <div className="flex items-center flex-wrap gap-1.5">
-                        <span className="bg-[#E5D7C3]/70 text-[#543D2B] px-2 py-0.5 rounded-md font-bold border border-[#D8C7B0]">
-                          <strong className="text-stone-800">Min:</strong> {minDisplay}
+                        <span className="bg-red-50 text-red-700 px-2 py-0.5 rounded-md font-bold border border-red-200">
+                          <strong className="text-red-800">Min:</strong> {minDisplay}
                         </span>
-                        <span className="bg-[#E5D7C3]/70 text-[#543D2B] px-2 py-0.5 rounded-md font-bold border border-[#D8C7B0]">
-                          <strong className="text-stone-800">Max:</strong> {maxDisplay}
+                        <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md font-bold border border-blue-200">
+                          <strong className="text-blue-800">Max:</strong> {maxDisplay}
                         </span>
                       </div>
                     );

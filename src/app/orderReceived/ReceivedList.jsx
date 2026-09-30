@@ -207,7 +207,7 @@ const ReceivedList = () => {
     {
       accessorKey: "work_order_rc_no",
       id: "Work Order Rc No",
-      header: "Work Order Rc No",
+      header: "Work Order No",
       cell: ({ row }) => <div>{row.getValue("Work Order Rc No")}</div>,
     },
     {
@@ -301,7 +301,13 @@ const ReceivedList = () => {
                     onClick={() =>
                       navigate(
                         `/order-received/dc-receipt/${orderReceivedId}`,
-                        { state: { orderReceivedStatus } },
+                        {
+                          state: {
+                            orderReceivedStatus,
+                            workOrderRow: row.original,
+                            workOrderRcNo: row.original.work_order_rc_no,
+                          },
+                        },
                       )
                     }
                   >
