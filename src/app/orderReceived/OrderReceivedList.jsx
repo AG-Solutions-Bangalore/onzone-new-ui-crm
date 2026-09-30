@@ -150,6 +150,26 @@ const OrderReceivedList = () => {
       cell: ({ row }) => <div>{row.getValue("Work Order Rc No")}</div>,
     },
     {
+      id: "Work Order Ref",
+      header: "Work Order Ref",
+      accessorFn: (row) => {
+        const val = row?.work_order_rc_w_ref;
+        if (!val || typeof val !== "string") return "-";
+        return val
+          .split(",")
+          .map((item) =>
+            item
+              .trim()
+              .replace(
+                /\/(?:(19|20)?\d{2}[-\u2013\u2014]\d{2,4}|(19|20)\d{2})$/,
+                ""
+              )
+          )
+          .join(", ");
+      },
+      cell: ({ getValue }) => <div>{getValue() || "-"}</div>,
+    },
+    {
       accessorKey: "work_order_rc_date",
       id: "Date",
       header: "Date",
@@ -221,7 +241,7 @@ const OrderReceivedList = () => {
                     <Edit className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Edit Order Received</TooltipContent>
+                <TooltipContent>Edit</TooltipContent>
               </Tooltip>
             </TooltipProvider>
 
@@ -241,7 +261,7 @@ const OrderReceivedList = () => {
                     <Package className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Packing List</TooltipContent>
+                <TooltipContent>View</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>

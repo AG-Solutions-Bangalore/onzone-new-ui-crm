@@ -144,7 +144,7 @@ const PaymentClose = () => {
                     }}
                   />
                 </TooltipTrigger>
-                <TooltipContent>View Payment</TooltipContent>
+                <TooltipContent>View</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>

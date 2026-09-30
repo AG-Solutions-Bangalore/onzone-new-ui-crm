@@ -239,7 +239,7 @@ const FairOrderFormList = () => {
                     <Eye className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>View Order</TooltipContent>
+                <TooltipContent>View</TooltipContent>
               </Tooltip>
 
               <Tooltip>
@@ -253,7 +253,7 @@ const FairOrderFormList = () => {
                     <Edit className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Edit Order</TooltipContent>
+                <TooltipContent>Edit</TooltipContent>
               </Tooltip>
 
               <Tooltip>
@@ -270,7 +270,7 @@ const FairOrderFormList = () => {
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Delete Order</TooltipContent>
+                <TooltipContent>Delete</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>

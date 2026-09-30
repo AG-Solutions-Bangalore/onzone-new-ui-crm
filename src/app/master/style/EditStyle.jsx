@@ -149,7 +149,7 @@ const EditStyle = ({styleId}) => {
             </PopoverTrigger>
           </TooltipTrigger>
           <TooltipContent>
-            <p>Edit Style</p>
+            <p>Edit</p>
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>

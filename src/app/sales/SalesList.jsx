@@ -21,6 +21,7 @@ import {
   SquareChevronRight,
   SquarePlus,
   Trash,
+  Trash2,
   UserPen,
   View,
 } from "lucide-react";
@@ -48,8 +49,18 @@ import {
 } from "@/components/ui/tooltip";
 
 import BASE_URL from "@/config/BaseUrl";
-
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useNavigate } from "react-router-dom";
+import { useToast } from "@/hooks/use-toast";
 
 import { ButtonConfig } from "@/config/ButtonConfig";
 
@@ -60,7 +71,52 @@ import {
 
 import Page from "@/app/dashboard/page";
 import moment from "moment";
+
 const SalesList = () => {
+  const { toast } = useToast();
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteSalesId, setDeleteSalesId] = useState(null);
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id) => {
+      const token = localStorage.getItem("token");
+      return await axios.delete(
+        `${BASE_URL}/api/delete-work-order-sales/${id}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+    },
+    onSuccess: (response) => {
+      refetch();
+      setDeleteConfirmOpen(false);
+      toast({
+        title: "Success",
+        description:
+          response?.data?.msg ||
+          response?.data?.message ||
+          "Sales record deleted successfully",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description:
+          error?.response?.data?.message ||
+          error?.response?.data?.msg ||
+          "Failed to delete sales record",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const confirmDelete = (e) => {
+    e?.preventDefault();
+    e?.stopPropagation();
+    if (deleteSalesId && !deleteMutation.isPending) {
+      deleteMutation.mutate(deleteSalesId);
+    }
+  };
   const {
     data: workordersales = [],
     isLoading,
@@ -108,6 +164,17 @@ const SalesList = () => {
         );
       },
     },
+
+    {
+      accessorKey: "work_order_sa_retailer_name",
+      id: "Retailer",
+      header: "Retailer",
+      cell: ({ row }) => (
+        <span className="text-stone-700 font-medium">
+          {row.getValue("Retailer")}
+        </span>
+      ),
+    },
     {
       accessorKey: "work_order_sa_no",
       id: "Work Order Sales No",
@@ -132,17 +199,6 @@ const SalesList = () => {
       },
     },
     {
-      accessorKey: "work_order_sa_retailer_name",
-      id: "Retailer",
-      header: "Retailer",
-      cell: ({ row }) => (
-        <span className="text-stone-700 font-medium">
-          {row.getValue("Retailer")}
-        </span>
-      ),
-    },
-
-    {
       accessorKey: "work_order_sa_dc_no",
       id: "Packing Slip No",
       header: "Packing Slip No",
@@ -165,9 +221,8 @@ const SalesList = () => {
 
         return (
           <span
-            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium border ${
-              statusColors[status] || "bg-stone-100 text-stone-700 border-stone-200"
-            }`}
+            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium border ${statusColors[status] || "bg-stone-100 text-stone-700 border-stone-200"
+              }`}
           >
             {status}
           </span>
@@ -218,7 +273,26 @@ const SalesList = () => {
                     <Eye className="h-3.5 w-3.5" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>View Packing Slip</TooltipContent>
+                <TooltipContent>View</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-stone-500 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                    onClick={() => {
+                      setDeleteSalesId(salesId);
+                      setDeleteConfirmOpen(true);
+                    }}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Delete</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>
@@ -351,9 +425,9 @@ const SalesList = () => {
                         {header.isPlaceholder
                           ? null
                           : flexRender(
-                              header.column.columnDef.header,
-                              header.getContext()
-                            )}
+                            header.column.columnDef.header,
+                            header.getContext()
+                          )}
                       </TableHead>
                     ))}
                   </TableRow>
@@ -425,6 +499,48 @@ const SalesList = () => {
           </div>
         </div>
       </div>
+
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the sales record.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className="bg-red-600 hover:bg-red-700 text-white"
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? (
+                <div className="flex items-center gap-2">
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    ></circle>
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                  Processing...
+                </div>
+              ) : (
+                "Delete"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Page>
   );
 };

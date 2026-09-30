@@ -15,6 +15,8 @@ import {
   CheckCircle2,
   CheckCheck,
   XCircle,
+  AlertCircle,
+  PlusCircle,
   ChevronDown,
   ChevronUp,
   Barcode,
@@ -69,7 +71,7 @@ const DcReceiptReceived = () => {
   const [notReceiveConfirmOpen, setNotReceiveConfirmOpen] = useState(false);
   const [selectedBoxToNotReceive, setSelectedBoxToNotReceive] = useState(null);
   const [notReceiveSelectedConfirmOpen, setNotReceiveSelectedConfirmOpen] = useState(false);
-  const [closeOrderConfirmOpen, setCloseOrderConfirmOpen] = useState(false);
+  const hasAutoClosedRef = useRef(false);
   const [barcodeFilter, setBarcodeFilter] = useState("all");
   const location = useLocation();
 
@@ -106,7 +108,7 @@ const DcReceiptReceived = () => {
   // --- Build table rows (aggregated by box, barcode, size, rate) ---
   const tableRows = useMemo(() => {
     const rows = [];
-    workOrderSub.forEach((item) => {
+    (workOrderSub || []).forEach((item) => {
       const box = item.work_order_rc_sub_box || "1";
       const barcodeStr = item.work_order_rc_sub_barcode || "";
       const barcodes = barcodeStr.split(",").filter((b) => b.trim());
@@ -148,7 +150,7 @@ const DcReceiptReceived = () => {
 
   // Build grouped boxes for barcode dialog
   const groupedBoxesForDialog = useMemo(() => {
-    return workOrderSub.reduce((acc, item) => {
+    return (workOrderSub || []).reduce((acc, item) => {
       const boxNumber = item.work_order_rc_sub_box;
       if (!acc[boxNumber]) {
         acc[boxNumber] = {
@@ -171,7 +173,7 @@ const DcReceiptReceived = () => {
   // Sort box numbers numerically from all sources
   const sortedBoxes = useMemo(() => {
     const boxSet = new Set();
-    workOrderSub.forEach((item) => {
+    (workOrderSub || []).forEach((item) => {
       if (item.work_order_rc_sub_box) {
         boxSet.add(String(item.work_order_rc_sub_box));
       }
@@ -188,6 +190,54 @@ const DcReceiptReceived = () => {
 
     return Array.from(boxSet).sort((a, b) => Number(a) - Number(b));
   }, [groupedRows, groupedBoxesForDialog, workOrderSub, workOrder?.work_order_rc_box]);
+
+  // Baseline recording for initial expected box pieces
+  useEffect(() => {
+    if (Object.keys(groupedBoxesForDialog).length > 0) {
+      Object.entries(groupedBoxesForDialog).forEach(([boxNum, bData]) => {
+        const baselineKey = `box_baseline_${id}_${boxNum}`;
+        if (!localStorage.getItem(baselineKey) && bData.totalPcs > 0) {
+          localStorage.setItem(baselineKey, String(bData.totalPcs));
+        }
+      });
+    }
+  }, [groupedBoxesForDialog, id]);
+
+  // Helper to derive breakdown (Expected, Extra, Missing, Scanned Counts, Items) for each box
+  const getBoxBreakdown = (boxNumber, currentTotalPcs) => {
+    try {
+      const savedStr = localStorage.getItem(`box_breakdown_${id}_${boxNumber}`);
+      if (savedStr) {
+        const parsed = JSON.parse(savedStr);
+        if (parsed && typeof parsed.expected === "number") {
+          return {
+            expected: parsed.expected,
+            matched: parsed.matched || 0,
+            missing: parsed.missing || 0,
+            extra: parsed.extra || 0,
+            total: parsed.total || currentTotalPcs,
+            scannedCounts: parsed.scannedCounts || {},
+            items: parsed.items || [],
+            isVerified: true,
+          };
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    // Default: not verified yet, so no extra or missing
+    return {
+      expected: currentTotalPcs,
+      matched: 0,
+      extra: 0,
+      missing: 0,
+      total: currentTotalPcs,
+      scannedCounts: {},
+      items: [],
+      isVerified: false,
+    };
+  };
 
   const generateFactoryCode = (factoryName) => {
     if (!factoryName) return "";
@@ -257,7 +307,7 @@ const DcReceiptReceived = () => {
       ["Date", moment(workOrder.work_order_rc_date).format("DD-MM-YYYY")],
     ];
     const rightFields = [
-      ["Work Order No", workOrder.work_order_rc_id || ""],
+      ["Work Order Ref", workOrder.work_order_rc_id || ""],
 
       ["No of Box", totalBoxes.toString()],
       ["Total Pcs", totalPcs.toString()],
@@ -374,40 +424,59 @@ const DcReceiptReceived = () => {
     },
   });
 
-  const updateOrderReceivedMutation = useMutation({
-    mutationFn: async (submissionData) => {
+  const saveBoxVerificationMutation = useMutation({
+    mutationFn: async ({ boxNumber, breakdown, updatedBarcodesList }) => {
       const token = localStorage.getItem("token");
+      const workOrderRcRef =
+        workOrder?.work_order_rc_ref || workOrder?.work_order_rc_id || id;
+
       const response = await axios.put(
-        `${BASE_URL}/api/update-work-orders-received/${id}`,
-        submissionData,
+        `${BASE_URL}/api/update-work-orders-received-status-box`,
+        {
+          box: boxNumber,
+          work_order_rc_ref: workOrderRcRef,
+        },
         {
           headers: { Authorization: `Bearer ${token}` },
         },
       );
-      return response.data;
+
+      return { res: response.data, boxNumber, breakdown, updatedBarcodesList };
     },
-    onSuccess: (data) => {
-      if (data?.code === "200" || data?.code === 200) {
-        toast({
-          title: "Success",
-          description: "Work Order Receive Updated Successfully",
-        });
-        refetch();
-        setBarcodeDialogOpen(false);
-        setValidationStatus(null);
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Error while editing the order received",
-        });
+    onSuccess: ({ boxNumber, breakdown, updatedBarcodesList }) => {
+      if (breakdown) {
+        try {
+          const exp = Number(breakdown.expected) || 0;
+          localStorage.setItem(
+            `box_breakdown_${id}_${boxNumber}`,
+            JSON.stringify({
+              expected: exp,
+              matched: breakdown.matched || 0,
+              missing: Math.max(0, exp - (breakdown.matched || 0)),
+              extra: breakdown.extra || 0,
+              total: updatedBarcodesList.length,
+              scannedCounts: breakdown.scannedCounts || {},
+              items: breakdown.items || [],
+            }),
+          );
+        } catch (e) {
+          console.error("Error saving box breakdown", e);
+        }
       }
+
+      toast({
+        title: "Box Verified & Updated",
+        description: `Box #${boxNumber} has been verified and updated successfully.`,
+      });
+
+      setBarcodeDialogOpen(false);
+      refetch();
     },
     onError: (error) => {
       toast({
         variant: "destructive",
         title: "Error",
-        description: error.response?.data?.message || "API Error occurred",
+        description: error.response?.data?.message || "Failed to update box status",
       });
     },
   });
@@ -439,14 +508,30 @@ const DcReceiptReceived = () => {
 
       return response.data;
     },
-    onSuccess: (data) => {
+    onSuccess: (data, boxNumber) => {
       setReceiveConfirmOpen(false);
       setSelectedBoxToReceive(null);
-      toast({
-        title: "Success",
-        description: data?.message || data?.msg || "Box marked as received successfully",
-      });
-      refetch();
+
+      const willAllBeReceived =
+        sortedBoxes.length > 0 &&
+        sortedBoxes.every(
+          (box) => String(box) === String(boxNumber) || isBoxReceivedCheck(box),
+        );
+
+      if (willAllBeReceived && !hasAutoClosedRef.current) {
+        hasAutoClosedRef.current = true;
+        toast({
+          title: "Success",
+          description: "All boxes received! Closing and marking order as received...",
+        });
+        closeAllOrderReceivedMutation.mutate();
+      } else {
+        toast({
+          title: "Success",
+          description: data?.message || data?.msg || "Box marked as received successfully",
+        });
+        refetch();
+      }
     },
     onError: (error) => {
       setReceiveConfirmOpen(false);
@@ -471,6 +556,7 @@ const DcReceiptReceived = () => {
   };
 
   const isBoxReceivedCheck = (boxNumber) => {
+    if (isOrderReceived) return true;
     const boxSubItems = workOrderSub.filter(
       (item) => String(item.work_order_rc_sub_box || "1") === String(boxNumber),
     );
@@ -507,14 +593,31 @@ const DcReceiptReceived = () => {
 
       return await Promise.all(promises);
     },
-    onSuccess: () => {
+    onSuccess: (_, boxesToUpdate) => {
       setReceiveSelectedConfirmOpen(false);
       setCheckedBoxes(new Set());
-      toast({
-        title: "Success",
-        description: "Selected box(es) marked as received successfully",
-      });
-      refetch();
+
+      const updatedBoxesSet = new Set((boxesToUpdate || []).map(String));
+      const willAllBeReceived =
+        sortedBoxes.length > 0 &&
+        sortedBoxes.every(
+          (box) => updatedBoxesSet.has(String(box)) || isBoxReceivedCheck(box),
+        );
+
+      if (willAllBeReceived && !hasAutoClosedRef.current) {
+        hasAutoClosedRef.current = true;
+        toast({
+          title: "Success",
+          description: "All boxes received! Closing and marking order as received...",
+        });
+        closeAllOrderReceivedMutation.mutate();
+      } else {
+        toast({
+          title: "Success",
+          description: "Selected box(es) marked as received successfully",
+        });
+        refetch();
+      }
     },
     onError: (error) => {
       setReceiveSelectedConfirmOpen(false);
@@ -579,7 +682,6 @@ const DcReceiptReceived = () => {
       return response.data;
     },
     onSuccess: (data) => {
-      setCloseOrderConfirmOpen(false);
       toast({
         title: "Success",
         description:
@@ -590,7 +692,7 @@ const DcReceiptReceived = () => {
       navigate("/factory-outlet/received");
     },
     onError: (error) => {
-      setCloseOrderConfirmOpen(false);
+      hasAutoClosedRef.current = false;
       toast({
         variant: "destructive",
         title: "Error",
@@ -599,6 +701,7 @@ const DcReceiptReceived = () => {
       });
     },
   });
+
 
   const updateBoxNotReceivedStatusMutation = useMutation({
     mutationFn: async (boxNumber) => {
@@ -621,6 +724,7 @@ const DcReceiptReceived = () => {
     onSuccess: (data) => {
       setNotReceiveConfirmOpen(false);
       setSelectedBoxToNotReceive(null);
+      hasAutoClosedRef.current = false;
       toast({
         title: "Success",
         description: data?.message || data?.msg || "Box received status undone successfully",
@@ -673,6 +777,7 @@ const DcReceiptReceived = () => {
     onSuccess: () => {
       setNotReceiveSelectedConfirmOpen(false);
       setCheckedBoxes(new Set());
+      hasAutoClosedRef.current = false;
       toast({
         title: "Success",
         description: "Selected box(es) marked as not received (undone) successfully",
@@ -725,64 +830,64 @@ const DcReceiptReceived = () => {
   };
 
   const openBarcodeDialog = (boxNumber, boxData) => {
+    const breakdown = getBoxBreakdown(boxNumber, boxData.totalPcs);
     setSelectedBox({
       boxNumber,
       originalBarcodes: [...boxData.barcodes],
       currentBarcodes: [...boxData.barcodes],
+      savedScannedCounts: breakdown.isVerified ? breakdown.scannedCounts : null,
     });
     setBarcodeDialogOpen(true);
   };
 
-  const handleSaveBoxBarcodes = (updatedBarcodesList) => {
-    if (!selectedBox) return;
-    const groupedBoxes = workOrderSub.reduce((acc, item) => {
-      const boxNumber = item.work_order_rc_sub_box;
-      if (!acc[boxNumber]) {
-        acc[boxNumber] = {
-          barcodes: [],
-        };
-      }
-      if (boxNumber === selectedBox.boxNumber) {
-        acc[boxNumber].barcodes = [...updatedBarcodesList];
-      } else {
-        if (item.work_order_rc_sub_barcode) {
-          const barcodes = item.work_order_rc_sub_barcode
-            .split(",")
-            .filter((b) => b.trim());
-          acc[boxNumber].barcodes.push(...barcodes);
-        }
-      }
-      return acc;
-    }, {});
+  // Target box filter from URL query param (?box=2) or navigation state
+  const targetBoxParam = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    const fromQuery = params.get("box");
+    if (fromQuery) return String(fromQuery).trim();
 
-    const workorder_sub_rc_data = Object.entries(groupedBoxes).map(
-      ([boxNumber, boxData]) => ({
-        work_order_rc_sub_box: boxNumber,
-        work_order_rc_sub_barcode: boxData.barcodes.join(","),
-      }),
+    const fromState = location.state?.singleBox || location.state?.autoOpenBox;
+    if (fromState !== undefined && fromState !== null && fromState !== "") {
+      return String(fromState).trim();
+    }
+    return null;
+  }, [location.state, location.search]);
+
+  const [activeBoxFilter, setActiveBoxFilter] = useState(targetBoxParam);
+
+  useEffect(() => {
+    setActiveBoxFilter(targetBoxParam);
+  }, [targetBoxParam]);
+
+  const displayedBoxes = useMemo(() => {
+    if (!activeBoxFilter) return sortedBoxes;
+    const filtered = sortedBoxes.filter(
+      (b) => String(b).trim() === String(activeBoxFilter).trim()
     );
+    return filtered.length > 0 ? filtered : sortedBoxes;
+  }, [sortedBoxes, activeBoxFilter]);
 
-    const totalPcs = workorder_sub_rc_data.reduce((total, box) => {
-      const barcodes = box.work_order_rc_sub_barcode
-        .split(",")
-        .filter((b) => b.trim());
-      return total + barcodes.length;
-    }, 0);
+  // When activeBoxFilter is set, auto-expand that box and smoothly scroll to it
+  useEffect(() => {
+    if (!activeBoxFilter) return;
+    setExpandedBoxes((prev) => new Set([...prev, String(activeBoxFilter)]));
 
-    const submissionData = {
-      work_order_rc_dc_no: workOrder.work_order_rc_dc_no,
-      work_order_rc_dc_date: workOrder.work_order_rc_dc_date,
-      work_order_rc_box: Object.keys(groupedBoxes).length.toString(),
-      work_order_rc_pcs: totalPcs.toString(),
-      work_order_rc_fabric_received:
-        workOrder.work_order_rc_fabric_received || "No",
-      work_order_rc_fabric_count: workOrder.work_order_rc_fabric_count || "",
-      work_order_rc_remarks: workOrder.work_order_rc_remarks || "",
-      workorder_sub_rc_data: workorder_sub_rc_data,
-      work_order_rc_count: Object.keys(groupedBoxes).length,
-    };
+    setTimeout(() => {
+      const boxElem = document.getElementById(`box-container-${activeBoxFilter}`);
+      if (boxElem) {
+        boxElem.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 250);
+  }, [activeBoxFilter, sortedBoxes]);
 
-    updateOrderReceivedMutation.mutate(submissionData);
+  const handleSaveBoxBarcodes = (updatedBarcodesList, breakdown) => {
+    if (!selectedBox) return;
+
+    saveBoxVerificationMutation.mutate({
+      boxNumber: selectedBox.boxNumber,
+      breakdown,
+      updatedBarcodesList,
+    });
   };
 
   // Accurate piece-by-piece match calculation
@@ -835,11 +940,11 @@ const DcReceiptReceived = () => {
   };
 
   const isAllChecked =
-    sortedBoxes.length > 0 && sortedBoxes.every((box) => checkedBoxes.has(box));
+    displayedBoxes.length > 0 && displayedBoxes.every((box) => checkedBoxes.has(box));
 
   const handleSelectAll = (e) => {
     if (e.target.checked) {
-      setCheckedBoxes(new Set(sortedBoxes));
+      setCheckedBoxes(new Set(displayedBoxes));
     } else {
       setCheckedBoxes(new Set());
     }
@@ -867,14 +972,24 @@ const DcReceiptReceived = () => {
             <CardHeader className="border-b py-3 px-4 bg-[#FDFBF7]">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-4 flex-wrap">
-                  <CardTitle className="text-lg font-semibold">
-                    Packing Receipt
+                  <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                    <span>Packing Receipt</span>
+                    {workOrder.work_order_rc_no && (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-bold bg-[#A27B5C] text-white shadow-2xs">
+                        REC/OZ/{workOrder.work_order_rc_no}
+                      </span>
+                    )}
                   </CardTitle>
                   <div className="flex items-center gap-3 text-sm text-gray-700">
                     <span className="flex items-center gap-1">
                       <span className="font-medium text-gray-600">Total No of Boxes:</span>
                       <span className="font-semibold text-gray-900">{sortedBoxes.length}</span>
                     </span>
+                    {activeBoxFilter && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-300">
+                        Filtering Box #{activeBoxFilter}
+                      </span>
+                    )}
                     <span className="text-gray-300">|</span>
                     <span className="flex items-center gap-1">
                       <span className="font-medium text-gray-600">Selected:</span>
@@ -884,7 +999,7 @@ const DcReceiptReceived = () => {
                 </div>
 
                 <div className="flex items-center gap-2 print-hidden-custom flex-wrap">
-                  {sortedBoxes.length > 0 && (
+                  {displayedBoxes.length > 0 && (
                     <label className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer select-none border rounded-md px-2.5 py-1.5 hover:bg-gray-50 transition-colors bg-white">
                       <input
                         type="checkbox"
@@ -892,7 +1007,7 @@ const DcReceiptReceived = () => {
                           if (el) {
                             el.indeterminate =
                               checkedBoxes.size > 0 &&
-                              checkedBoxes.size < sortedBoxes.length;
+                              checkedBoxes.size < displayedBoxes.length;
                           }
                         }}
                         checked={isAllChecked}
@@ -903,7 +1018,15 @@ const DcReceiptReceived = () => {
                     </label>
                   )}
 
-                  {selectedBoxesToReceiveList.length > 0 && (
+                  {/* Status indicator when order is already in Received section */}
+                  {isOrderReceived && (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-300">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                      Order Received
+                    </span>
+                  )}
+
+                  {!isOrderReceived && selectedBoxesToReceiveList.length > 0 && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -918,7 +1041,7 @@ const DcReceiptReceived = () => {
                     </Button>
                   )}
 
-                  {selectedBoxesToNotReceiveList.length > 0 && (
+                  {!isOrderReceived && selectedBoxesToNotReceiveList.length > 0 && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -933,19 +1056,12 @@ const DcReceiptReceived = () => {
                     </Button>
                   )}
 
-                  {/* Close the Order Button - visible ONLY when all boxes are marked as received and order is not yet closed */}
-                  {!isOrderReceived && isAllBoxesReceived && (
-                    <Button
-                      size="sm"
-                      onClick={() => setCloseOrderConfirmOpen(true)}
-                      disabled={closeAllOrderReceivedMutation.isPending}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-xs"
-                    >
-                      <div className="flex items-center gap-1.5 cursor-pointer">
-                        <CheckCheck className="h-4 w-4" />
-                        Close the Order
-                      </div>
-                    </Button>
+                  {/* Finalizing indicator when auto-closing order */}
+                  {closeAllOrderReceivedMutation.isPending && (
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-emerald-50 text-emerald-800 text-xs font-semibold border border-emerald-200">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-600" />
+                      Finalizing Order...
+                    </div>
                   )}
 
                   {/* Excel Download Button */}
@@ -986,6 +1102,12 @@ const DcReceiptReceived = () => {
                     </td>
                     <td className="p-1 w-[16rem] border-r">
                       : {workOrder.work_order_rc_factory}
+                    </td>
+                    <td className="font-semibold p-1 w-[6rem] text-right border-r">
+                      RC No
+                    </td>
+                    <td className="p-1 w-[8rem] border-r font-bold text-stone-900">
+                      : {workOrder.work_order_rc_no ? `REC/OZ/${workOrder.work_order_rc_no}` : "-"}
                     </td>
                     <td className="font-semibold p-1 w-[6rem] text-right border-r">
                       Date
@@ -1042,7 +1164,7 @@ const DcReceiptReceived = () => {
                   </tr>
                   <tr className="border-l border-r border-b border-black">
                     <td className="font-semibold p-1 w-[8rem] border-r">
-                      Work Order No
+                      Work Order Ref
                     </td>
                     <td className="p-1 w-[16rem] border-r">
                       : {workOrder.work_order_rc_id}
@@ -1086,9 +1208,34 @@ const DcReceiptReceived = () => {
                 }
               `}</style>
 
+              {/* Banner when viewing a specific box */}
+              {activeBoxFilter && (
+                <div className="flex items-center justify-between p-3.5 mb-3 bg-[#FDFBF7] border border-[#A27B5C]/40 rounded-xl shadow-xs">
+                  <div className="flex items-center gap-3">
+                    <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-md text-xs font-bold bg-[#A27B5C] text-white shadow-2xs">
+                      Box #{activeBoxFilter}
+                    </span>
+                    <span className="text-sm font-medium text-stone-800">
+                      Showing details for <strong>Box #{activeBoxFilter}</strong> only (Total {sortedBoxes.length} boxes in this order)
+                    </span>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setActiveBoxFilter(null);
+                      navigate(`/order-received/dc-receipt/${id}`, { replace: true });
+                    }}
+                    className="text-xs font-semibold h-8 bg-white border-stone-300 hover:bg-stone-100 text-stone-800 cursor-pointer shadow-2xs"
+                  >
+                    View All Boxes ({sortedBoxes.length})
+                  </Button>
+                </div>
+              )}
+
               {/* Table grouped by box – all boxes visible on screen, only checked printed */}
               <div className="space-y-2.5">
-                {sortedBoxes.map((box) => {
+                {displayedBoxes.map((box) => {
                   const isChecked = checkedBoxes.has(box);
                   const isExpanded = expandedBoxes.has(box);
                   const rows = groupedRows[box] || [];
@@ -1103,11 +1250,13 @@ const DcReceiptReceived = () => {
                   );
 
                   const isBoxReceived = isBoxReceivedCheck(box);
+                  const breakdown = getBoxBreakdown(box, boxData.totalPcs);
 
                   return (
                     <React.Fragment key={`box-frag-${box}`}>
                       {/* Box Container: Screen card style vs Print format */}
                       <div
+                        id={`box-container-${box}`}
                         className={`rounded-xl border transition-all duration-200 overflow-hidden ${isChecked
                             ? "print-box-container border-[#A27B5C] bg-[#FDFBF7]/50 shadow-xs ring-1 ring-[#A27B5C]/20"
                             : "print-hidden-custom border-stone-200/90 bg-white hover:border-stone-300 shadow-2xs"
@@ -1122,6 +1271,12 @@ const DcReceiptReceived = () => {
                               </td>
                               <td className="p-1 w-[16rem] border-r">
                                 : {workOrder.work_order_rc_factory}
+                              </td>
+                              <td className="font-semibold p-1 w-[6rem] text-right border-r">
+                                RC No
+                              </td>
+                              <td className="p-1 w-[8rem] border-r font-bold">
+                                : {workOrder.work_order_rc_no ? `REC/OZ/${workOrder.work_order_rc_no}` : "-"}
                               </td>
                               <td className="font-semibold p-1 w-[6rem] text-right border-r">
                                 Date
@@ -1178,7 +1333,7 @@ const DcReceiptReceived = () => {
                             </tr>
                             <tr className="border-l border-r border-b border-black">
                               <td className="font-semibold p-1 w-[8rem] border-r">
-                                Work Order No
+                                Work Order Ref
                               </td>
                               <td className="p-1 w-[16rem] border-r">
                                 : {workOrder.work_order_rc_id}
@@ -1217,21 +1372,38 @@ const DcReceiptReceived = () => {
 
                             <div className="print-hidden-custom flex items-center gap-1.5">
                               {isBoxReceived && (
-                                <div className="flex items-center gap-1.5">
+                                <div className="flex items-center gap-1.5 flex-wrap">
                                   <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
                                     <CheckCircle2 className="h-3 w-3" />
                                     Received
                                   </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleNotReceiveBoxClick(box)}
-                                    disabled={updateBoxNotReceivedStatusMutation.isPending}
-                                    className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-md bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 transition-colors cursor-pointer"
-                                    title="Undo received status for this box"
-                                  >
-                                    <RotateCcw className="h-3 w-3 text-amber-700" />
-                                    Undo
-                                  </button>
+
+                                  {breakdown.isVerified && breakdown.missing > 0 && (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-md bg-amber-50 text-amber-800 border border-amber-300">
+                                      <AlertTriangle className="h-3 w-3 text-amber-600" />
+                                      Partially Received
+                                    </span>
+                                  )}
+
+                                  {breakdown.isVerified && breakdown.extra > 0 && breakdown.missing === 0 && (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-md bg-amber-50 text-amber-800 border border-amber-300">
+                                      <PlusCircle className="h-3 w-3 text-amber-600" />
+                                      Extra Added (+{breakdown.extra})
+                                    </span>
+                                  )}
+
+                                  {!isOrderReceived && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleNotReceiveBoxClick(box)}
+                                      disabled={updateBoxNotReceivedStatusMutation.isPending}
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-md bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 transition-colors cursor-pointer"
+                                      title="Undo received status for this box"
+                                    >
+                                      <RotateCcw className="h-3 w-3 text-amber-700" />
+                                      Undo
+                                    </button>
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -1281,10 +1453,13 @@ const DcReceiptReceived = () => {
                                     Barcode
                                   </th>
                                   <th className="border-b border-stone-200 print:border p-2 print:p-1 text-center font-bold text-xs uppercase tracking-wider">
+                                    Status
+                                  </th>
+                                  <th className="border-b border-stone-200 print:border p-2 print:p-1 text-center font-bold text-xs uppercase tracking-wider">
                                     Size
                                   </th>
                                   <th className="border-b border-stone-200 print:border p-2 print:p-1 text-center font-bold text-xs uppercase tracking-wider">
-                                    Amount (₹)
+                                    MRP (₹)
                                   </th>
                                   <th className="border-b border-stone-200 print:border p-2 print:p-1 text-right font-bold text-xs uppercase tracking-wider">
                                     Quantity
@@ -1292,32 +1467,99 @@ const DcReceiptReceived = () => {
                                 </tr>
                               </thead>
                               <tbody className="bg-white divide-y divide-stone-100">
-                                {rows.length > 0 ? (
-                                  rows.map((row, idx) => (
-                                    <tr key={idx} className="hover:bg-stone-50/70 transition-colors">
-                                      <td className="border-stone-200 print:border p-2 print:p-1 font-mono font-semibold text-stone-800 text-xs">
-                                        {row.barcode}
-                                      </td>
-                                      <td className="border-stone-200 print:border p-2 print:p-1 text-center text-stone-700 text-xs">
-                                        {row.size}
-                                      </td>
-                                      <td className="border-stone-200 print:border p-2 print:p-1 text-center font-mono text-stone-800 text-xs">
-                                        {row.amount}
-                                      </td>
-                                      <td className="border-stone-200 print:border p-2 print:p-1 text-right font-bold text-stone-900 text-xs">
-                                        {row.quantity}
-                                      </td>
-                                    </tr>
-                                  ))
+                                {rows.length > 0 || (breakdown.isVerified && breakdown.items?.length > 0) ? (
+                                  <>
+                                    {rows.map((row, idx) => {
+                                      const isVerified = breakdown.isVerified;
+                                      const scannedQty = isVerified
+                                        ? (breakdown.scannedCounts?.[row.barcode] ?? 0)
+                                        : null;
+                                      const expectedQty = row.quantity || 0;
+
+                                      return (
+                                        <tr key={idx} className="hover:bg-stone-50/70 transition-colors">
+                                          <td className="border-stone-200 print:border p-2 print:p-1 font-mono font-semibold text-stone-800 text-xs">
+                                            {row.barcode}
+                                          </td>
+                                          <td className="border-stone-200 print:border p-2 print:p-1 text-center text-xs">
+                                            {!isVerified ? (
+                                              <span className="text-stone-400 text-xs font-medium">-</span>
+                                            ) : scannedQty === expectedQty ? (
+                                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                                Matched ({scannedQty}/{expectedQty})
+                                              </span>
+                                            ) : scannedQty === 0 ? (
+                                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                                                <AlertCircle className="w-3 h-3 text-rose-600" />
+                                                Missing ({expectedQty} pcs)
+                                              </span>
+                                            ) : scannedQty < expectedQty ? (
+                                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                                                <AlertTriangle className="w-3 h-3 text-amber-600" />
+                                                Missing: {expectedQty - scannedQty} (Matched: {scannedQty}/{expectedQty})
+                                              </span>
+                                            ) : (
+                                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-300">
+                                                <PlusCircle className="w-3 h-3 text-amber-600" />
+                                                Extra Added (+{scannedQty - expectedQty})
+                                              </span>
+                                            )}
+                                          </td>
+                                          <td className="border-stone-200 print:border p-2 print:p-1 text-center text-stone-700 text-xs">
+                                            {row.size}
+                                          </td>
+                                          <td className="border-stone-200 print:border p-2 print:p-1 text-center font-mono text-stone-800 text-xs">
+                                            {row.amount}
+                                          </td>
+                                          <td className="border-stone-200 print:border p-2 print:p-1 text-right font-bold text-stone-900 text-xs">
+                                            {row.quantity}
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+
+                                    {/* Render any extra barcodes scanned that were not in the original packing list */}
+                                    {breakdown.isVerified &&
+                                      (breakdown.items || [])
+                                        .filter(
+                                          (item) =>
+                                            (item.expectedQty === 0 || !item.expectedQty) &&
+                                            item.scannedQty > 0 &&
+                                            !rows.some((r) => r.barcode === item.barcode)
+                                        )
+                                        .map((extraItem, eIdx) => (
+                                          <tr key={`extra-${eIdx}`} className="bg-amber-50/40 hover:bg-amber-50/70 transition-colors">
+                                            <td className="border-stone-200 print:border p-2 print:p-1 font-mono font-semibold text-amber-900 text-xs">
+                                              {extraItem.barcode}
+                                            </td>
+                                            <td className="border-stone-200 print:border p-2 print:p-1 text-center text-xs">
+                                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-amber-100 text-amber-900 border border-amber-300">
+                                                <PlusCircle className="w-3 h-3 text-amber-700" />
+                                                Extra Added (+{extraItem.scannedQty})
+                                              </span>
+                                            </td>
+                                            <td className="border-stone-200 print:border p-2 print:p-1 text-center text-stone-500 text-xs">
+                                              {extraItem.size || "-"}
+                                            </td>
+                                            <td className="border-stone-200 print:border p-2 print:p-1 text-center font-mono text-stone-500 text-xs">
+                                              {extraItem.amount || "-"}
+                                            </td>
+                                            <td className="border-stone-200 print:border p-2 print:p-1 text-right font-bold text-amber-900 text-xs">
+                                              {extraItem.scannedQty}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                  </>
                                 ) : (
                                   <tr>
-                                    <td colSpan={4} className="p-3 text-center text-stone-500 text-xs">
+                                    <td colSpan={5} className="p-3 text-center text-stone-500 text-xs">
                                       No item barcodes registered for this box yet.
                                     </td>
                                   </tr>
                                 )}
                               </tbody>
-                              {rows.length > 0 && (
+                              {/* {rows.length > 0 && (
                                 <tfoot>
                                   <tr className="bg-stone-50/80 font-bold text-xs text-stone-900 border-t border-stone-200">
                                     <td colSpan={2} className="p-2 print:p-1 text-stone-600 font-semibold">
@@ -1331,7 +1573,7 @@ const DcReceiptReceived = () => {
                                     </td>
                                   </tr>
                                 </tfoot>
-                              )}
+                              )} */}
                             </table>
                           </div>
                         </div>
@@ -1354,8 +1596,9 @@ const DcReceiptReceived = () => {
         expectedItems={selectedBox ? (groupedRows[selectedBox.boxNumber] || []) : []}
         initialBarcodes={selectedBox?.currentBarcodes || []}
         originalBarcodes={selectedBox?.originalBarcodes || []}
+        savedScannedCounts={selectedBox?.savedScannedCounts}
         onSave={handleSaveBoxBarcodes}
-        isSaving={updateOrderReceivedMutation.isPending}
+        isSaving={saveBoxVerificationMutation.isPending}
       />
 
       <ConfirmDialog
@@ -1416,18 +1659,6 @@ const DcReceiptReceived = () => {
         cancelText="Cancel"
         onConfirm={confirmNotReceiveSelectedBoxes}
         isLoading={updateSelectedBoxesNotReceivedStatusMutation.isPending}
-      />
-
-      <ConfirmDialog
-        open={closeOrderConfirmOpen}
-        onOpenChange={setCloseOrderConfirmOpen}
-        title="Close Order Confirmation"
-        description="Do you really want to close the order?"
-        variant="success"
-        confirmText="Yes"
-        cancelText="No"
-        onConfirm={() => closeAllOrderReceivedMutation.mutate()}
-        isLoading={closeAllOrderReceivedMutation.isPending}
       />
     </Page>
   );

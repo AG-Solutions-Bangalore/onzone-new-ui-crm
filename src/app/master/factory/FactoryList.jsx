@@ -281,7 +281,7 @@ const FactoryList = () => {
                     <Edit className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Edit Factory</TooltipContent>
+                <TooltipContent>Edit</TooltipContent>
               </Tooltip>
             </TooltipProvider>
 
@@ -300,7 +300,7 @@ const FactoryList = () => {
                     <Trash className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Delete Factory</TooltipContent>
+                <TooltipContent>Delete</TooltipContent>
               </Tooltip>
             </TooltipProvider>
             {userCreated === "No" && (

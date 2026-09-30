@@ -150,7 +150,7 @@ const PaymentPending = () => {
                   <TooltipTrigger asChild>
                     <Eye className="h-4 w-4 cursor-not-allowed opacity-50" />
                   </TooltipTrigger>
-                  <TooltipContent>View Payment</TooltipContent>
+                  <TooltipContent>View</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             ) : (
@@ -165,7 +165,7 @@ const PaymentPending = () => {
                       }}
                     />
                   </TooltipTrigger>
-                  <TooltipContent>View Payment</TooltipContent>
+                  <TooltipContent>View</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             )}

@@ -320,7 +320,7 @@ const BrandList = () => {
                     <Edit className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Edit Brand</TooltipContent>
+                <TooltipContent>Edit</TooltipContent>
               </Tooltip>
             </TooltipProvider>
 
@@ -339,7 +339,7 @@ const BrandList = () => {
                     <Trash className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Delete Brand</TooltipContent>
+                <TooltipContent>Delete</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>

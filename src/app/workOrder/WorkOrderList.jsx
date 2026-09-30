@@ -311,7 +311,7 @@ const WorkOrderList = () => {
                             <Edit className="h-3.5 w-3.5" />
                           </Button>
                         </TooltipTrigger>
-                        <TooltipContent>Edit Work Order</TooltipContent>
+                        <TooltipContent>Edit</TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
                   )}
@@ -332,11 +332,11 @@ const WorkOrderList = () => {
                           <Eye className="h-3.5 w-3.5" />
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent>Work Order Receipt</TooltipContent>
+                      <TooltipContent>View</TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
 
-                  <TooltipProvider>
+                  {/* <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
@@ -355,7 +355,8 @@ const WorkOrderList = () => {
                       </TooltipTrigger>
                       <TooltipContent>Download Barcode</TooltipContent>
                     </Tooltip>
-                  </TooltipProvider>
+                  </TooltipProvider> */}
+                  
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -377,7 +378,7 @@ const WorkOrderList = () => {
                           <SquareChevronRight className="h-3.5 w-3.5" />
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent>Work Order View List</TooltipContent>
+                      <TooltipContent>View List</TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
 
@@ -397,7 +398,7 @@ const WorkOrderList = () => {
                             <Trash className="h-3.5 w-3.5" />
                           </Button>
                         </TooltipTrigger>
-                        <TooltipContent>Delete Work Order</TooltipContent>
+                        <TooltipContent>Delete</TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
                   )}

@@ -154,13 +154,13 @@ const WorkOrderMaterial = () => {
     {
       accessorKey: "finished_stock_tcode",
       id: "Barcode",
-      header: "Barcode",
+      header: "Article",
       cell: ({ row }) => <div>{row.getValue("Barcode")}</div>,
     },
     {
       accessorKey: "finished_stock_barcode",
       id: "Article",
-      header: "Article",
+      header: "Barcode",
       cell: ({ row }) => <div>{row.getValue("Article")}</div>,
     },
     {
@@ -200,7 +200,7 @@ const WorkOrderMaterial = () => {
         ) : null;
       },
     }
-    
+
   ];
 
   const table = useReactTable({
@@ -308,9 +308,9 @@ const WorkOrderMaterial = () => {
                       {header.isPlaceholder
                         ? null
                         : flexRender(
-                            header.column.columnDef.header,
-                            header.getContext()
-                          )}
+                          header.column.columnDef.header,
+                          header.getContext()
+                        )}
                     </TableHead>
                   ))}
                 </TableRow>

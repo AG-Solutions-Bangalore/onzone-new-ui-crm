@@ -210,7 +210,7 @@ const HalfRatioList = () => {
                     <Edit className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Edit Half-Ratio</TooltipContent>
+                <TooltipContent>Edit</TooltipContent>
               </Tooltip>
             </TooltipProvider>
 
@@ -229,7 +229,7 @@ const HalfRatioList = () => {
                     <Trash className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Delete Half-Ratio</TooltipContent>
+                <TooltipContent>Delete</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>

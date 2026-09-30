@@ -241,7 +241,8 @@ const EditFairOrderForm = () => {
       );
       return res.data?.fairOrderStock || [];
     },
-    staleTime: 1000 * 60 * 2,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const retailerOptions = (retailerData?.customer || []).map((r) => ({

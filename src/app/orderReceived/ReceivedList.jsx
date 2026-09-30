@@ -198,11 +198,37 @@ const ReceivedList = () => {
         );
       },
     },
+     {
+      accessorKey: "work_order_rc_factory",
+      id: "Factory",
+      header: "Factory",
+      cell: ({ row }) => <div>{row.getValue("Factory")}</div>,
+    },
     {
       accessorKey: "work_order_rc_no",
       id: "Work Order Rc No",
       header: "Work Order Rc No",
       cell: ({ row }) => <div>{row.getValue("Work Order Rc No")}</div>,
+    },
+    {
+      id: "Work Order Ref",
+      header: "Work Order Ref",
+      accessorFn: (row) => {
+        const val = row?.work_order_rc_w_ref;
+        if (!val || typeof val !== "string") return "-";
+        return val
+          .split(",")
+          .map((item) =>
+            item
+              .trim()
+              .replace(
+                /\/(?:(19|20)?\d{2}[-\u2013\u2014]\d{2,4}|(19|20)\d{2})$/,
+                ""
+              )
+          )
+          .join(", ");
+      },
+      cell: ({ getValue }) => <div>{getValue() || "-"}</div>,
     },
     {
       accessorKey: "work_order_rc_date",
@@ -217,12 +243,7 @@ const ReceivedList = () => {
         );
       },
     },
-    {
-      accessorKey: "work_order_rc_factory",
-      id: "Factory",
-      header: "Factory",
-      cell: ({ row }) => <div>{row.getValue("Factory")}</div>,
-    },
+   
     {
       accessorKey: "work_order_rc_brand",
       id: "Brand",
@@ -248,7 +269,7 @@ const ReceivedList = () => {
           badgeClass = "bg-stone-100 text-stone-700 border-stone-300";
         } else if (norm === "received") {
           displayStatus = "Received";
-          badgeClass = "bg-rose-50 text-rose-700 border-rose-200/80";
+          badgeClass = "bg-green-50 text-green-700 border-green-200/80";
         }
 
         return (
@@ -390,8 +411,8 @@ const ReceivedList = () => {
                 type="button"
                 className={`h-7 px-2.5 text-xs font-semibold rounded-lg transition-all cursor-pointer whitespace-nowrap ${
                   statusFilter === "received"
-                    ? "bg-rose-600 text-white shadow-none"
-                    : "text-rose-700 hover:bg-rose-50"
+                    ? "bg-green-600 text-white shadow-none"
+                    : "text-green-800 hover:bg-green-50"
                 }`}
                 onClick={() =>
                   setStatusFilter(

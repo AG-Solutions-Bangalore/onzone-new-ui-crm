@@ -177,7 +177,7 @@ const RatioList = () => {
                     <Eye className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>View Ratio Matrix</TooltipContent>
+                <TooltipContent>View</TooltipContent>
               </Tooltip>
             </TooltipProvider>
 
@@ -196,7 +196,7 @@ const RatioList = () => {
                     <Trash className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Delete Ratio</TooltipContent>
+                <TooltipContent>Delete</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>

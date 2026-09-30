@@ -110,6 +110,7 @@ export function AppSidebar({ ...props }) {
         url: "/factory-outlet/received",
         icon: PackageCheck,
         isActive: false,
+        hasScan: true,
       },
       {
         title: "Sales Packing",

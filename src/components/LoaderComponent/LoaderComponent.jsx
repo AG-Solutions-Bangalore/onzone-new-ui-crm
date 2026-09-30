@@ -3,14 +3,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"; // ✅ Ensure Card components are imported
 import { Loader2 } from "lucide-react";
 
-export const LoaderComponent = ({ name }) => {
+export const LoaderComponent = () => {
   return (
     <Page>
-      <div className="flex justify-center items-center h-full">
-        <Button disabled>
-          <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
-          Loading {name}
-        </Button>
+      <div className="flex justify-center items-center min-h-[60vh] w-full">
+        <Loader2 className="h-9 w-9 animate-spin text-[#A27B5C]" />
       </div>
     </Page>
   );
@@ -33,16 +30,11 @@ export const ErrorComponent = ({ message, refetch }) => {
   );
 };
 
-export const WithoutLoaderComponent = ({ name }) => {
+export const WithoutLoaderComponent = () => {
   return (
-    // <Page>
-    <div className="flex justify-center items-center h-96">
-      <Button disabled>
-        <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
-        Loading {name}
-      </Button>
+    <div className="flex justify-center items-center min-h-[60vh] w-full">
+      <Loader2 className="h-9 w-9 animate-spin text-[#A27B5C]" />
     </div>
-    // </Page>
   );
 };
 
