@@ -100,6 +100,10 @@ const SalesList = lazy(() => import("@/app/sales/SalesList"));
 const CreateSales = lazy(() => import("@/app/sales/CreateSales"));
 const ViewSales = lazy(() => import("@/app/sales/ViewSales"));
 const EditSales = lazy(() => import("@/app/sales/EditSales"));
+const SalesReturnList = lazy(() => import("@/app/salesReturn/SalesReturnList"));
+const CreateSalesReturn = lazy(() => import("@/app/salesReturn/CreateSalesReturn"));
+const ViewSalesReturn = lazy(() => import("@/app/salesReturn/ViewSalesReturn"));
+const EditSalesReturn = lazy(() => import("@/app/salesReturn/EditSalesReturn"));
 const FinishedStockList = lazy(
   () => import("@/app/finishedStock/FinishedStockList"),
 );
@@ -240,6 +244,12 @@ function AppRoutes() {
         <Route path="/sales/add-sales" element={<CreateSales />} />
         <Route path="/sales/view-sales/:id" element={<ViewSales />} />
         <Route path="/sales/edit-sales/:id" element={<EditSales />} />
+
+        {/* sales return */}
+        <Route path="/sales-return" element={<SalesReturnList />} />
+        <Route path="/sales-return/add-sales-return" element={<CreateSalesReturn />} />
+        <Route path="/sales-return/view-sales-return/:id" element={<ViewSalesReturn />} />
+        <Route path="/sales-return/edit-sales-return/:id" element={<EditSalesReturn />} />
 
         {/* order form (old) */}
         <Route path="/order-form" element={<OrderFormList />} />

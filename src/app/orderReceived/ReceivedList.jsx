@@ -16,6 +16,7 @@ import {
   Search,
   SquarePlus,
   CheckCircle,
+  Truck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -135,33 +136,30 @@ const ReceivedList = () => {
   // ----- confirmation dialog state -----
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [confirmOrderId, setConfirmOrderId] = useState(null);
+  const [confirmOrderRcNo, setConfirmOrderRcNo] = useState(null);
 
-  // ----- mutation for updating status -----
+  // ----- mutation for changing status from Received to On the Way -----
   const [updatingId, setUpdatingId] = useState(null);
   const updateStatusMutation = useMutation({
     mutationFn: async (id) => {
       const token = localStorage.getItem("token");
-      const res1 = await axios.put(
-        `${BASE_URL}/api/update-work-order-received-finish-by-id/${id}`,
-        null,
+      const response = await axios.put(
+        `${BASE_URL}/api/update-work-orders-received-factory-status/${id}`,
+        {},
         { headers: { Authorization: `Bearer ${token}` } },
       );
-      try {
-        await axios.put(
-          `${BASE_URL}/api/update-work-orders-received-factory-status/${id}`,
-          {},
-          { headers: { Authorization: `Bearer ${token}` } },
-        );
-      } catch (e) {}
-      return res1.data;
+      return response.data;
     },
     onMutate: (id) => {
       setUpdatingId(id);
     },
     onSuccess: (data) => {
       toast({
-        title: "Success",
-        description: data?.msg || data?.message || "Order marked as received successfully",
+        title: "Status Updated",
+        description:
+          data?.msg ||
+          data?.message ||
+          "Order status changed to On the Way successfully",
       });
       refetch();
     },
@@ -169,11 +167,21 @@ const ReceivedList = () => {
       setUpdatingId(null);
       setConfirmDialogOpen(false);
       setConfirmOrderId(null);
+      setConfirmOrderRcNo(null);
     },
     onError: (error) => {
       console.error("Update status error:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description:
+          error?.response?.data?.message ||
+          error?.response?.data?.msg ||
+          "Failed to update status to On the Way",
+      });
       setConfirmDialogOpen(false);
       setConfirmOrderId(null);
+      setConfirmOrderRcNo(null);
     },
   });
 
@@ -290,7 +298,7 @@ const ReceivedList = () => {
         const userType = localStorage.getItem("userType");
 
         return (
-          <div className="flex flex-row">
+          <div className="flex flex-row items-center gap-1">
             {/* DC Receipt */}
             <TooltipProvider>
               <Tooltip>
@@ -317,6 +325,38 @@ const ReceivedList = () => {
                 <TooltipContent>Packing Receipt</TooltipContent>
               </Tooltip>
             </TooltipProvider>
+
+            {/* Change status from Received to On the Way */}
+            {getNormalizedStatus(orderReceivedStatus) === "received" && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 cursor-pointer"
+                      onClick={() => {
+                        setConfirmOrderId(orderReceivedId);
+                        setConfirmOrderRcNo(row.original.work_order_rc_no);
+                        setConfirmDialogOpen(true);
+                      }}
+                      disabled={
+                        updateStatusMutation.isLoading &&
+                        updatingId === orderReceivedId
+                      }
+                    >
+                      {updateStatusMutation.isLoading &&
+                      updatingId === orderReceivedId ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Truck className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Change to On the Way</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
           </div>
         );
       },
@@ -572,19 +612,26 @@ const ReceivedList = () => {
         <DialogContent className="bg-[#FDFBF7] border border-stone-200/80 rounded-2xl">
           <DialogHeader>
             <DialogTitle className="font-heading text-stone-900 font-bold">
-              Confirm Completion
+              Change Status to On the Way
             </DialogTitle>
             <DialogDescription className="text-stone-600 text-xs">
-              Do you want to mark this order as <strong>Received</strong>?
+              Do you want to change the status of order{" "}
+              {confirmOrderRcNo ? (
+                <strong className="text-stone-800">{confirmOrderRcNo}</strong>
+              ) : (
+                "this order"
+              )}{" "}
+              from <strong>Received</strong> back to <strong>On the Way</strong>?
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
             <Button
               variant="outline"
-              className="border-stone-200 text-stone-700 hover:bg-[#F5F2EB] rounded-xl text-xs"
+              className="border-stone-200 text-stone-700 hover:bg-[#F5F2EB] rounded-xl text-xs cursor-pointer"
               onClick={() => {
                 setConfirmDialogOpen(false);
                 setConfirmOrderId(null);
+                setConfirmOrderRcNo(null);
               }}
             >
               No
@@ -592,7 +639,7 @@ const ReceivedList = () => {
             <Button
               onClick={handleConfirm}
               disabled={updateStatusMutation.isLoading}
-              className="bg-[#A27B5C] hover:bg-[#8C6547] text-white rounded-xl text-xs shadow-2xs"
+              className="bg-[#543D2B] hover:bg-[#3D2C1F] text-white rounded-xl text-xs shadow-2xs cursor-pointer"
             >
               {updateStatusMutation.isLoading ? (
                 <>
@@ -600,7 +647,7 @@ const ReceivedList = () => {
                   Updating...
                 </>
               ) : (
-                "Yes"
+                "Yes, Change"
               )}
             </Button>
           </DialogFooter>
