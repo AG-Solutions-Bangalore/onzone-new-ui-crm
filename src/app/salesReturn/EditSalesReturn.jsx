@@ -1,0 +1,872 @@
+import React, { useState, useEffect, useRef } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { ChevronLeft, Send, Trash2, Minus, Plus, PackageCheck, ArrowRight, RotateCcw } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import * as z from "zod";
+import axios from "axios";
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
+import {
+  LoaderComponent,
+  ErrorComponent,
+} from "@/components/LoaderComponent/LoaderComponent";
+import Page from "../dashboard/page";
+import { useToast } from "@/hooks/use-toast";
+import BASE_URL from "@/config/BaseUrl";
+
+const formSchema = z.object({
+  work_order_sa_dc_no: z.string().min(1, "Return Slip No is required"),
+  work_order_sa_dc_date: z.string().optional(),
+  work_order_sa_box: z.union([z.string(), z.number()]).optional(),
+  work_order_sa_pcs: z.union([
+    z.string().min(1, "Pieces count is required"),
+    z.number().min(1, "Pieces count is required"),
+  ]),
+  work_order_sa_fabric_sale: z.string().optional(),
+  work_order_sa_remarks: z.string().optional(),
+  work_order_sa_count: z.union([z.string(), z.number()]).optional(),
+  workorder_sub_sa_data: z.array(
+    z.object({
+      id: z.union([z.string(), z.number()]).optional(),
+      work_order_sa_sub_barcode: z.string().min(1, "T Code is required"),
+    })
+  ),
+});
+
+const EditSalesReturn = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const itemsContainerRef = useRef(null);
+
+  const [workorder, setWorkOrderSales] = useState({
+    work_order_sa_date: "",
+    work_order_sa_retailer_id: "",
+    work_order_sa_dc_no: "",
+    work_order_sa_dc_date: "",
+    work_order_sa_retailer_name: "",
+    work_order_sa_box: "",
+    work_order_sa_pcs: "",
+    work_order_sa_fabric_sale: "",
+    work_order_sa_count: "",
+    work_order_sa_remarks: "",
+  });
+
+  const useTemplate = { id: "", work_order_sa_sub_barcode: "" };
+  const [users, setUsers] = useState([useTemplate]);
+
+  // Alert Dialog States
+  const [deleteDialog, setDeleteDialog] = useState({
+    isOpen: false,
+    data: null, // { index, barcode, dbId }
+    message: "",
+  });
+
+  // Update confirmation dialog state
+  const [confirmUpdateDialog, setConfirmUpdateDialog] = useState({
+    isOpen: false,
+    initialCount: 0,
+    currentCount: 0,
+    addedCount: 0,
+    pendingData: null,
+  });
+
+  const {
+    data: workOrderData,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ["workOrderSalesReturn", id],
+    queryFn: async () => {
+      if (!id) {
+        throw new Error("No ID provided");
+      }
+
+      const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("No authentication token found");
+      }
+
+      try {
+        const response = await axios.get(
+          `${BASE_URL}/api/fetch-work-order-sales-return-by-id/${id}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+
+        return response.data;
+      } catch (error) {
+        console.error("API Error:", error.response?.data || error.response?.data?.message);
+        throw error;
+      }
+    },
+    enabled: !!id,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  });
+
+  useEffect(() => {
+    if (workOrderData) {
+      const workordersales =
+        workOrderData.workordersalesreturn ||
+        workOrderData.workordersales_return ||
+        workOrderData.salesreturn ||
+        workOrderData.sales_return ||
+        workOrderData.workorder_sales_return ||
+        workOrderData.workordersales ||
+        workOrderData.data ||
+        workOrderData;
+
+      const workordersalessub =
+        workOrderData.workordersalesreturnsub ||
+        workOrderData.workordersalesreturn_sub ||
+        workOrderData.workordersales_return_sub ||
+        workOrderData.salesreturnsub ||
+        workOrderData.sales_return_sub ||
+        workOrderData.workordersalessub ||
+        workOrderData.sub_data ||
+        workOrderData.workorder_sub_sa_data ||
+        [];
+
+      if (workordersales) {
+        setWorkOrderSales({
+          work_order_sa_date: workordersales.work_order_sa_date || "",
+          work_order_sa_retailer_id:
+            workordersales.work_order_sa_retailer_id || "",
+          work_order_sa_dc_no: workordersales.work_order_sa_dc_no || "",
+          work_order_sa_dc_date: workordersales.work_order_sa_dc_date || "",
+          work_order_sa_retailer_name:
+            workordersales.work_order_sa_retailer_name || "",
+          work_order_sa_box: workordersales.work_order_sa_box || "",
+          work_order_sa_pcs: workordersales.work_order_sa_pcs || "",
+          work_order_sa_fabric_sale:
+            workordersales.work_order_sa_fabric_sale || "",
+          work_order_sa_count: workordersales.work_order_sa_count || "",
+          work_order_sa_remarks: workordersales.work_order_sa_remarks || "",
+        });
+      }
+
+      if (Array.isArray(workordersalessub) && workordersalessub.length > 0) {
+        setUsers(
+          workordersalessub.map((item) => ({
+            id: item.id || "",
+            work_order_sa_sub_barcode:
+              item.work_order_sa_sub_barcode || item.barcode || "",
+          }))
+        );
+      } else {
+        setUsers([useTemplate]);
+      }
+    }
+  }, [workOrderData]);
+
+  const validateOnlyDigits = (inputtxt) => {
+    const phoneno = /^\d+$/;
+    return phoneno.test(inputtxt) || inputtxt.length === 0;
+  };
+
+  const onInputChange = (e) => {
+    const { name, value } = e.target;
+
+    if (name === "work_order_sa_box" || name === "work_order_sa_pcs") {
+      if (validateOnlyDigits(value)) {
+        setWorkOrderSales((prev) => ({
+          ...prev,
+          [name]: value,
+        }));
+      }
+    } else {
+      setWorkOrderSales((prev) => ({
+        ...prev,
+        [name]: value,
+      }));
+    }
+  };
+
+  const onChange = (e, index) => {
+    const { name, value } = e.target;
+    setUsers((prev) =>
+      prev.map((user, i) => (i === index ? { ...user, [name]: value } : user))
+    );
+  };
+
+  const addItem = () => {
+    setUsers((prev) => [...prev, { id: "", work_order_sa_sub_barcode: "" }]);
+    setTimeout(() => {
+      if (itemsContainerRef.current) {
+        itemsContainerRef.current.scrollTo({
+          top: itemsContainerRef.current.scrollHeight,
+          behavior: "smooth",
+        });
+      }
+    }, 50);
+  };
+
+  // Show confirmation dialog for barcode deletion
+  const confirmBarcodeDelete = (index, barcode, dbId) => {
+    setDeleteDialog({
+      isOpen: true,
+      data: { index, barcode, dbId },
+      message: dbId
+        ? `Are you sure you want to delete barcode "${barcode}" from the database?`
+        : `Are you sure you want to remove barcode "${barcode}"?`,
+    });
+  };
+
+  // Handle confirmed deletion
+  const handleConfirmedDelete = async () => {
+    const { index, barcode, dbId } = deleteDialog.data;
+
+    // If this barcode exists in the database, delete it via API
+    if (dbId) {
+      const success = await deleteBarcodeFromDB(dbId);
+      if (!success) return;
+    }
+
+    // Remove from local state
+    const newUsers = [...users];
+    newUsers.splice(index, 1);
+    setUsers(newUsers);
+
+    toast({
+      title: dbId ? "Deleted" : "Removed",
+      description: `Barcode ${dbId ? "deleted from database" : "removed"} successfully`,
+      variant: "default",
+    });
+
+    setDeleteDialog({ isOpen: false, data: null, message: "" });
+  };
+
+  // Delete individual barcode from database
+  const deleteBarcodeFromDB = async (barcodeId) => {
+    if (!barcodeId) return true;
+
+    try {
+      const token = localStorage.getItem("token");
+      await axios.delete(
+        `${BASE_URL}/api/delete-work-order-sales-return-sub/${barcodeId}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      queryClient.invalidateQueries({ queryKey: ["workOrderSalesReturnList"] });
+      queryClient.invalidateQueries({ queryKey: ["workOrderSalesReturn", id] });
+      queryClient.invalidateQueries({ queryKey: ["salesReturnListView", id] });
+      return true;
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to delete barcode from database",
+      });
+      return false;
+    }
+  };
+
+  const updateOrderSalesMutation = useMutation({
+    mutationFn: async (data) => {
+      const token = localStorage.getItem("token");
+      const response = await axios.put(
+        `${BASE_URL}/api/update-work-orders-sales-return/${id}`,
+        data,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      return response.data;
+    },
+    onSuccess: (data) => {
+      if (
+        data?.code === "200" ||
+        data?.code === 200 ||
+        data?.status === 200 ||
+        data?.status === "success" ||
+        data?.msg ||
+        data?.message
+      ) {
+        // Invalidate related queries
+        queryClient.invalidateQueries({ queryKey: ["workOrderSalesReturnList"] });
+        queryClient.invalidateQueries({ queryKey: ["workOrderSalesReturn", id] });
+        queryClient.invalidateQueries({ queryKey: ["salesReturnListView", id] });
+
+        toast({
+          title: "Success",
+          description:
+            data?.msg || data?.message || "Sales return record updated successfully",
+        });
+        navigate("/sales-return");
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: data?.msg || data?.message || "Error while editing the sales return",
+        });
+      }
+    },
+    onError: (error) => {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.response?.data?.message || "API Error occurred",
+      });
+    },
+  });
+
+  const executeSubmit = (dataToSubmit) => {
+    updateOrderSalesMutation.mutate(dataToSubmit);
+  };
+
+  const getCleanSubData = () => {
+    return users
+      .filter(
+        (u) =>
+          u.work_order_sa_sub_barcode &&
+          u.work_order_sa_sub_barcode.trim() !== ""
+      )
+      .map((u) => {
+        const item = {
+          work_order_sa_sub_barcode: u.work_order_sa_sub_barcode.trim(),
+        };
+        if (u.id) {
+          item.id = u.id;
+        }
+        return item;
+      });
+  };
+
+  const onSubmit = async (e) => {
+    if (e) e.preventDefault();
+
+    const cleanSubData = getCleanSubData();
+    const currentCount = cleanSubData.length;
+    const currentPcs = parseInt(workorder.work_order_sa_pcs) || 0;
+
+    const data = {
+      work_order_sa_dc_no: workorder.work_order_sa_dc_no,
+      work_order_sa_dc_date: workorder.work_order_sa_dc_date,
+      work_order_sa_box: parseInt(workorder.work_order_sa_box) || 0,
+      work_order_sa_pcs: currentPcs,
+      work_order_sa_fabric_sale: workorder.work_order_sa_fabric_sale,
+      work_order_sa_remarks: workorder.work_order_sa_remarks,
+      workorder_sub_sa_data: cleanSubData,
+      work_order_sa_count: parseInt(workorder.work_order_sa_count) || currentCount,
+    };
+
+    const validation = formSchema.safeParse(data);
+    if (!validation.success) {
+      toast({
+        variant: "destructive",
+        title: "Please fix the following:",
+        description: (
+          <div className="grid gap-1">
+            {validation.error.errors.map((error, i) => {
+              const field = error.path[0].toString().replace(/_/g, " ");
+              const label = field.charAt(0).toUpperCase() + field.slice(1);
+              return (
+                <div key={i} className="flex items-start gap-2">
+                  <div className="flex items-center justify-center h-4 w-4 mt-0.5 flex-shrink-0 rounded-full bg-red-100 text-red-700 text-xs">
+                    {i + 1}
+                  </div>
+                  <p className="text-xs">
+                    <span className="font-medium">{label}:</span>{" "}
+                    {error.message}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        ),
+      });
+      return;
+    }
+
+    const initialCount =
+      parseInt(
+        workOrderData?.workordersalesreturn?.work_order_sa_count ||
+        workOrderData?.workordersales?.work_order_sa_count
+      ) ||
+      parseInt(
+        workOrderData?.workordersalesreturn?.work_order_sa_pcs ||
+        workOrderData?.workordersales?.work_order_sa_pcs
+      ) ||
+      (Array.isArray(workOrderData?.workordersalesreturnsub)
+        ? workOrderData.workordersalesreturnsub.length
+        : workOrderData?.workordersalessub?.length) ||
+      0;
+    const diff = currentCount - initialCount;
+
+    // Trigger double confirmation if T-Code count changed or differs from Pcs count
+    if (currentCount !== initialCount || currentCount !== currentPcs) {
+      setConfirmUpdateDialog({
+        isOpen: true,
+        initialCount,
+        currentCount,
+        addedCount: diff,
+        pendingData: data,
+      });
+      return;
+    }
+
+    executeSubmit(data);
+  };
+
+  const handleConfirmedUpdate = () => {
+    const cleanSubData = getCleanSubData();
+    const count = cleanSubData.length;
+
+    const dataToSubmit = {
+      work_order_sa_dc_no: workorder.work_order_sa_dc_no,
+      work_order_sa_dc_date: workorder.work_order_sa_dc_date,
+      work_order_sa_box: parseInt(workorder.work_order_sa_box) || 0,
+      work_order_sa_pcs: count,
+      work_order_sa_fabric_sale: workorder.work_order_sa_fabric_sale,
+      work_order_sa_remarks: workorder.work_order_sa_remarks,
+      workorder_sub_sa_data: cleanSubData,
+      work_order_sa_count: count,
+    };
+
+    // Update local state Total No of Pcs and Count
+    setWorkOrderSales((prev) => ({
+      ...prev,
+      work_order_sa_pcs: count,
+      work_order_sa_count: count,
+    }));
+
+    setConfirmUpdateDialog({
+      isOpen: false,
+      initialCount: 0,
+      currentCount: 0,
+      addedCount: 0,
+      pendingData: null,
+    });
+
+    executeSubmit(dataToSubmit);
+  };
+
+  if (isLoading) {
+    return <LoaderComponent name="Work Order Sales Return Data" />;
+  }
+
+  if (isError) {
+    return (
+      <ErrorComponent
+        message={`Error Fetching Work Order Sales Return Data: ${
+          error?.message || "Unknown error"
+        }`}
+        refetch={refetch}
+      />
+    );
+  }
+
+  return (
+    <Page>
+      <div className="max-w-full mx-auto">
+        <Card className="shadow-lg border border-stone-200/80 rounded-2xl overflow-hidden">
+          <CardHeader className="border-b bg-[#FDFBF7] py-4 px-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#543D2B] text-white">
+                  <RotateCcw className="h-4 w-4" />
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase tracking-wider font-semibold text-[#A27B5C]">
+                    Sales Return
+                  </span>
+                  <CardTitle className="text-base font-bold text-stone-800 tracking-tight leading-tight">
+                    Update Work Order Sales Return
+                  </CardTitle>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                asChild
+                className="h-9 border-stone-200 text-stone-700 hover:bg-[#F5F2EB] rounded-xl text-xs font-semibold shadow-2xs"
+              >
+                <Link to="/sales-return" className="flex items-center gap-2">
+                  <ChevronLeft className="h-4 w-4" />
+                  Back
+                </Link>
+              </Button>
+            </div>
+          </CardHeader>
+
+          <CardContent className="p-5 sm:p-6 bg-white space-y-6">
+            <form className="space-y-6">
+              {/* Basic Information Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="work_order_sa_retailer_name" className="text-xs font-semibold text-stone-700">
+                    Retailer
+                  </Label>
+                  <Input
+                    id="work_order_sa_retailer_name"
+                    name="work_order_sa_retailer_name"
+                    value={workorder.work_order_sa_retailer_name}
+                    onChange={onInputChange}
+                    disabled
+                    className="h-10 text-xs bg-stone-50 border-stone-200 rounded-xl text-stone-700 font-medium"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="work_order_sa_date" className="text-xs font-semibold text-stone-700">
+                    Return Date
+                  </Label>
+                  <Input
+                    id="work_order_sa_date"
+                    type="date"
+                    name="work_order_sa_date"
+                    value={workorder.work_order_sa_date}
+                    onChange={onInputChange}
+                    disabled
+                    className="h-10 text-xs bg-stone-50 border-stone-200 rounded-xl text-stone-700 font-medium"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="work_order_sa_pcs" className="text-xs font-semibold text-stone-700">
+                    Total No of Pcs <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="work_order_sa_pcs"
+                    name="work_order_sa_pcs"
+                    value={workorder.work_order_sa_pcs}
+                    onChange={onInputChange}
+                    className="h-10 text-xs bg-white border-stone-200 focus:border-[#A27B5C] focus:ring-[#A27B5C]/20 rounded-xl text-stone-800 font-medium"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="work_order_sa_dc_no" className="text-xs font-semibold text-stone-700">
+                    Return Slip No <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="work_order_sa_dc_no"
+                    name="work_order_sa_dc_no"
+                    value={workorder.work_order_sa_dc_no}
+                    onChange={onInputChange}
+                    className="h-10 text-xs bg-white border-stone-200 focus:border-[#A27B5C] focus:ring-[#A27B5C]/20 rounded-xl text-stone-800 font-medium"
+                  />
+                </div>
+
+                <div className="col-span-full space-y-1.5">
+                  <Label htmlFor="work_order_sa_remarks" className="text-xs font-semibold text-stone-700">
+                    Remarks / Return Notes
+                  </Label>
+                  <Textarea
+                    id="work_order_sa_remarks"
+                    name="work_order_sa_remarks"
+                    value={workorder.work_order_sa_remarks}
+                    onChange={onInputChange}
+                    className="min-h-[80px] text-xs bg-white border-stone-200 focus:border-[#A27B5C] focus:ring-[#A27B5C]/20 rounded-xl text-stone-800"
+                  />
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Sub Items Section */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-xs text-stone-900 uppercase tracking-wider flex items-center gap-2">
+                    Item Details
+                    <span className="text-[10px] font-semibold bg-[#F5F2EB] text-[#543D2B] px-2 py-0.5 rounded-full border border-stone-200/80 normal-case tracking-normal">
+                      {users.length} item(s)
+                    </span>
+                  </h4>
+
+                  <Button
+                    type="button"
+                    onClick={addItem}
+                    size="sm"
+                    className="h-8 px-3.5 bg-[#543D2B] hover:bg-[#412E20] text-white rounded-xl text-xs font-bold shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add
+                  </Button>
+                </div>
+
+                {/* Compact Scrollable Grid */}
+                <div
+                  ref={itemsContainerRef}
+                  className="rounded-2xl border border-stone-200/80 bg-white/70 p-3 min-h-[140px] max-h-[350px] overflow-y-auto shadow-inner"
+                >
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">
+                    {users.map((user, index) => (
+                      <div
+                        key={index}
+                        className="bg-[#FAF8F5] hover:bg-white border border-[#E6DEC9] hover:border-[#A27B5C] rounded-xl p-2.5 shadow-2xs transition-all flex flex-col justify-between gap-1.5"
+                      >
+                        <Input
+                          type="hidden"
+                          name="id"
+                          value={user.id}
+                          onChange={(e) => onChange(e, index)}
+                        />
+
+                        <div className="flex items-center justify-between gap-1.5">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-[#543D2B]/10 text-[10px] font-bold text-[#543D2B]">
+                              {index + 1}
+                            </span>
+                            <Label
+                              htmlFor={`tcode_${index}`}
+                              className="text-[11px] font-bold text-stone-700 truncate"
+                            >
+                              T-Code #{index + 1}
+                            </Label>
+                          </div>
+
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            type="button"
+                            onClick={() =>
+                              confirmBarcodeDelete(
+                                index,
+                                user.work_order_sa_sub_barcode,
+                                user.id
+                              )
+                            }
+                            className="h-6 w-6 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer shrink-0"
+                            title={
+                              user.id
+                                ? "Delete from database"
+                                : "Remove locally"
+                            }
+                          >
+                            {user.id ? (
+                              <Trash2 className="h-3.5 w-3.5" />
+                            ) : (
+                              <Minus className="h-3.5 w-3.5" />
+                            )}
+                          </Button>
+                        </div>
+
+                        <Input
+                          id={`tcode_${index}`}
+                          name="work_order_sa_sub_barcode"
+                          value={user.work_order_sa_sub_barcode}
+                          onChange={(e) => {
+                            const value = e.target.value
+                              .toUpperCase()
+                              .replace(/\s/g, "");
+                            onChange(
+                              {
+                                target: {
+                                  name: "work_order_sa_sub_barcode",
+                                  value,
+                                },
+                              },
+                              index
+                            );
+                          }}
+                          placeholder="ENTER T-CODE..."
+                          className="h-8 text-xs px-2.5 bg-white border border-stone-200 focus:border-[#A27B5C] focus:ring-1 focus:ring-[#A27B5C]/20 rounded-lg text-stone-900 font-mono tracking-wider font-semibold uppercase"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row justify-end gap-3 pt-2">
+                <Button
+                  variant="outline"
+                  asChild
+                  className="h-10 px-5 border-stone-200 text-stone-700 hover:bg-[#F5F2EB] rounded-xl text-xs font-semibold shadow-2xs"
+                >
+                  <Link to="/sales-return">Cancel</Link>
+                </Button>
+
+                <Button
+                  type="button"
+                  onClick={onSubmit}
+                  disabled={updateOrderSalesMutation.isPending}
+                  className="h-10 px-6 bg-[#543D2B] hover:bg-[#412E20] text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                >
+                  {updateOrderSalesMutation.isPending ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Updating...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4" />
+                      <span>Update</span>
+                    </>
+                  )}
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog
+        open={deleteDialog.isOpen}
+        onOpenChange={(open) =>
+          !open && setDeleteDialog({ isOpen: false, data: null, message: "" })
+        }
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteDialog.message}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmedDelete}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {deleteDialog.data?.dbId ? "Delete" : "Remove"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Update Count Confirmation Dialog */}
+      <AlertDialog
+        open={confirmUpdateDialog.isOpen}
+        onOpenChange={(open) =>
+          !open &&
+          setConfirmUpdateDialog({
+            isOpen: false,
+            initialCount: 0,
+            currentCount: 0,
+            addedCount: 0,
+            pendingData: null,
+          })
+        }
+      >
+        <AlertDialogContent className="max-w-md rounded-2xl p-6 bg-white border border-stone-200 shadow-xl">
+          <AlertDialogHeader className="space-y-2">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#E5D7C3] text-[#543D2B]">
+                <PackageCheck className="h-5 w-5" />
+              </div>
+              <div>
+                <AlertDialogTitle className="text-base font-bold text-stone-900">
+                  Confirm Pcs & T-Code Update
+                </AlertDialogTitle>
+                <p className="text-xs text-stone-500">
+                  Verify the updated number of pieces before saving
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-3 p-3.5 bg-[#FAF8F5] rounded-xl border border-[#E6DEC9] space-y-3">
+              <div className="grid grid-cols-3 gap-2 text-center items-center">
+                <div className="bg-white p-2 rounded-lg border border-stone-200 shadow-2xs">
+                  <p className="text-[10px] uppercase font-bold text-stone-400">Previous Pcs</p>
+                  <p className="text-base font-extrabold text-stone-700">{confirmUpdateDialog.initialCount}</p>
+                </div>
+
+                <div className="flex flex-col items-center justify-center">
+                  <span
+                    className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                      confirmUpdateDialog.addedCount >= 0
+                        ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                        : "bg-amber-100 text-amber-700 border border-amber-200"
+                    }`}
+                  >
+                    {confirmUpdateDialog.addedCount >= 0
+                      ? `+${confirmUpdateDialog.addedCount} Added`
+                      : `${confirmUpdateDialog.addedCount} Removed`}
+                  </span>
+                  <ArrowRight className="h-4 w-4 text-stone-400 mt-1" />
+                </div>
+
+                <div className="bg-[#E5D7C3]/60 p-2 rounded-lg border border-[#D8C7B0] shadow-2xs">
+                  <p className="text-[10px] uppercase font-bold text-[#543D2B]">New Total Pcs</p>
+                  <p className="text-base font-black text-[#543D2B]">{confirmUpdateDialog.currentCount}</p>
+                </div>
+              </div>
+
+              <AlertDialogDescription className="text-xs text-stone-600 leading-relaxed text-left">
+                Earlier, the Total No of Pcs was{" "}
+                <strong className="text-stone-900 font-bold">{confirmUpdateDialog.initialCount}</strong>.
+                {confirmUpdateDialog.addedCount > 0 ? (
+                  <>
+                    {" "}You have added{" "}
+                    <strong className="text-[#543D2B] font-bold">
+                      {confirmUpdateDialog.addedCount} new T-Code
+                      {confirmUpdateDialog.addedCount > 1 ? "s" : ""}
+                    </strong>{" "}
+                    (Total:{" "}
+                    <strong className="text-stone-900">
+                      {confirmUpdateDialog.currentCount}
+                    </strong>
+                    ).
+                  </>
+                ) : (
+                  <>
+                    {" "}You have modified the T-Codes to a total of{" "}
+                    <strong className="text-stone-900 font-bold">
+                      {confirmUpdateDialog.currentCount}
+                    </strong>
+                    .
+                  </>
+                )}
+                <br />
+                Do you want to update the{" "}
+                <span className="font-semibold text-stone-900">
+                  Total No of Pcs
+                </span>{" "}
+                to{" "}
+                <strong className="text-[#543D2B] font-extrabold">
+                  {confirmUpdateDialog.currentCount}
+                </strong>{" "}
+                and proceed with updating this sales return?
+              </AlertDialogDescription>
+            </div>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="mt-4 gap-2">
+            <AlertDialogCancel className="h-9 rounded-xl text-xs font-semibold cursor-pointer">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmedUpdate}
+              className="h-9 px-4 bg-[#543D2B] hover:bg-[#412E20] text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer"
+            >
+              Yes, Update to {confirmUpdateDialog.currentCount} Pcs
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </Page>
+  );
+};
+
+export default EditSalesReturn;

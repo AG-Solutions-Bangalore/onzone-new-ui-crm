@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import axios from "axios";
 import { z } from "zod";
 import {
   Trash2,
@@ -11,33 +10,17 @@ import {
   Loader2,
   Calendar,
   Building2,
-  FileText,
   Barcode,
   PackageCheck,
   CheckCircle2,
-  AlertCircle,
   Hash,
-  ShoppingBag,
-  Layers,
-  Scan,
-  Boxes,
+  RotateCcw,
 } from "lucide-react";
 import Select from "react-select";
-import BoxScannerModal from "@/components/BoxScannerModal";
 
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import BASE_URL from "@/config/BaseUrl";
 import Page from "../dashboard/page";
@@ -54,7 +37,7 @@ const orderSchema = z.object({
     z.string().min(1, "Retailer is required"),
     z.number().min(1, "Retailer is required"),
   ]),
-  work_order_sa_dc_no: z.string().min(1, "Packing Slip No is required"),
+  work_order_sa_dc_no: z.string().min(1, "Return Slip No is required"),
   work_order_sa_dc_date: z.string().optional(),
   work_order_sa_box: z.union([z.string(), z.number()]).optional(),
   work_order_sa_pcs: z.union([
@@ -174,10 +157,9 @@ const calculateBoxCombos = (totalPcs) => {
         return;
       }
       if (remaining < 0) return;
-
       for (let i = startIndex; i < standardSizes.length; i++) {
         const size = standardSizes[i];
-        if (remaining >= size) {
+        if (size <= remaining) {
           current.push(size);
           search(remaining - size, i, current);
           current.pop();
@@ -188,46 +170,48 @@ const calculateBoxCombos = (totalPcs) => {
     return results;
   };
 
-  const formatCombo = (boxList) => {
-    if (!boxList || boxList.length === 0) return null;
-    const counts = {};
-    boxList.forEach((size) => {
-      counts[size] = (counts[size] || 0) + 1;
-    });
-    return Object.entries(counts)
+  const formatCombo = (countsMap) => {
+    return Object.entries(countsMap)
       .sort((a, b) => Number(b[0]) - Number(a[0]))
       .map(([size, count]) => `${size}x${count}`)
       .join(" + ");
   };
 
+  const toCountsMap = (sizesList) => {
+    const map = {};
+    sizesList.forEach((s) => {
+      map[s] = (map[s] || 0) + 1;
+    });
+    return map;
+  };
+
   const exactCombos = findExactCombos(n);
 
   if (exactCombos.length > 0) {
-    const sortedCombos = [...exactCombos].sort((a, b) => a.length - b.length);
-    const maxComboBoxes = sortedCombos[0];
-    const minComboBoxes = sortedCombos[sortedCombos.length - 1];
+    const sorted = [...exactCombos].sort((a, b) => a.length - b.length);
+    const minComboSizes = sorted[0];
+    const maxComboSizes = sorted[sorted.length - 1];
 
-    const maxComboStr = formatCombo(maxComboBoxes);
-    const minComboStr =
-      minComboBoxes.length !== maxComboBoxes.length
-        ? formatCombo(minComboBoxes)
-        : null;
+    const minFormatted = formatCombo(toCountsMap(minComboSizes));
+    const maxFormatted = formatCombo(toCountsMap(maxComboSizes));
 
     return {
-      minCombo: minComboStr,
-      maxCombo: maxComboStr,
+      minCombo: minFormatted,
+      maxCombo: maxFormatted,
     };
   }
 
   if (n % 16 === 0) {
+    const boxes = n / 16;
     return {
       minCombo: null,
-      maxCombo: `16x${n / 16}`,
+      maxCombo: `16x${boxes}`,
     };
   }
 
   const base16Count = Math.floor(n / 16);
   const remainder = n % 16;
+
   if (base16Count > 0 && remainder > 0) {
     return {
       minCombo: null,
@@ -301,7 +285,7 @@ const customSelectStyles = {
   }),
 };
 
-const CreateSales = () => {
+const CreateSalesReturn = () => {
   const navigate = useNavigate();
   const inputRef = useRef(null);
   const { toast } = useToast();
@@ -322,33 +306,6 @@ const CreateSales = () => {
   const [barcodes, setBarcodes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [currentInputValue, setCurrentInputValue] = useState("");
-  const [boxScannerOpen, setBoxScannerOpen] = useState(false);
-  const [clearDialogOpen, setClearDialogOpen] = useState(false);
-
-  // Handler for adding items from BoxScannerModal
-  const handleAddBoxItems = ({ barcodes: newBarcodes, boxLabel, totalPcs, orderRef, boxCount }) => {
-    if (!newBarcodes || newBarcodes.length === 0) return;
-
-    const currentPcs = parseInt(workorder.work_order_sa_pcs, 10) || 0;
-    const updatedBarcodes = [...barcodes, ...newBarcodes];
-    setBarcodes(updatedBarcodes);
-
-    // If current pieces is less than total barcodes, auto-update pieces so validation passes
-    const newTargetPcs = currentPcs < updatedBarcodes.length ? updatedBarcodes.length : currentPcs;
-    const currentBox = parseInt(workorder.work_order_sa_box, 10) || 0;
-
-    setWorkorder((prev) => ({
-      ...prev,
-      work_order_sa_pcs: newTargetPcs,
-      work_order_sa_box: currentBox + (boxCount || 1),
-    }));
-
-    toast({
-      title: "Box Items Added",
-      description: `Added ${newBarcodes.length} T-Code barcodes from ${boxLabel} (${orderRef}). Total: ${updatedBarcodes.length} pcs.`,
-      variant: "default",
-    });
-  };
 
   // Debounce pieces input to prevent firing API on every single keystroke/arrow step
   const [debouncedPcs, setDebouncedPcs] = useState(workorder.work_order_sa_pcs);
@@ -362,27 +319,29 @@ const CreateSales = () => {
 
   // Query backend getboxcombination/{value} API using debounced value
   const { data: apiBoxCombo, isLoading: isBoxComboLoading } = useQuery({
-    queryKey: ["boxCombination", debouncedPcs],
+    queryKey: ["boxCombinationReturn", debouncedPcs],
     queryFn: async () => {
       const token = localStorage.getItem("token");
       const pcs = debouncedPcs;
       if (!pcs || parseInt(pcs, 10) <= 0) return null;
       try {
-        const response = await axios.get(
+        const response = await fetch(
           `${BASE_URL}/api/getboxcombination/${pcs}`,
           {
-            headers: { Authorization: `Bearer ${token}` },
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
           }
         );
-        console.log("getboxcombination API response for", pcs, ":", response.data);
-        return response.data;
+        if (!response.ok) return null;
+        return await response.json();
       } catch (err) {
         console.warn("getboxcombination API error:", err);
         return null;
       }
     },
-    enabled: !!(debouncedPcs && parseInt(debouncedPcs, 10) > 0),
-    staleTime: 60 * 1000,
+    enabled: Boolean(debouncedPcs && parseInt(debouncedPcs, 10) > 0),
+    staleTime: 5 * 60 * 1000,
   });
 
   const isComboLoading =
@@ -425,29 +384,40 @@ const CreateSales = () => {
         })),
       };
 
-      const response = await fetch(`${BASE_URL}/api/create-work-order-sales`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(submissionData),
-      });
-      if (!response.ok) throw new Error("Failed to create packing list");
+      const response = await fetch(
+        `${BASE_URL}/api/create-work-order-sales-return`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(submissionData),
+        }
+      );
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(
+          errorData?.message || errorData?.msg || "Failed to create sales return"
+        );
+      }
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       toast({
         title: "Success",
-        description: "Sales packing list created successfully",
+        description:
+          data?.msg ||
+          data?.message ||
+          "Sales return record created successfully",
         variant: "default",
       });
-      navigate("/sales");
+      navigate("/sales-return");
     },
     onError: (error) => {
       toast({
         title: "Error",
-        description: error.response?.data?.message || "Failed to create packing list",
+        description: error.message || "Failed to create sales return",
         variant: "destructive",
       });
     },
@@ -527,7 +497,7 @@ const CreateSales = () => {
 
         toast({
           title: "T-Code Verified",
-          description: `Barcode ${barcode} added to sales dispatch.`,
+          description: `Barcode ${barcode} added to sales return.`,
           variant: "default",
         });
 
@@ -594,16 +564,6 @@ const CreateSales = () => {
     []
   );
 
-  const handleConfirmClearAll = () => {
-    setBarcodes([]);
-    setCurrentInputValue("");
-    setClearDialogOpen(false);
-    toast({
-      title: "Cleared",
-      description: "All scanned barcodes have been removed.",
-    });
-  };
-
   const onSubmit = async (e) => {
     e.preventDefault();
 
@@ -667,7 +627,7 @@ const CreateSales = () => {
   const isInputDisabled = maxPcs > 0 && barcodes.length >= maxPcs;
 
   if (isFetching) {
-    return <LoaderComponent name="Sales Order Form" />;
+    return <LoaderComponent name="Sales Return Form" />;
   }
 
   return (
@@ -678,14 +638,14 @@ const CreateSales = () => {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#FDFBF7] border border-stone-200/80 px-5 py-3 rounded-2xl shadow-2xs">
           <div>
             <span className="text-[10px] uppercase tracking-wider font-semibold text-[#A27B5C] flex items-center gap-1.5">
-              <ShoppingBag className="h-3.5 w-3.5" />
-              Sales Packing
+              <RotateCcw className="h-3.5 w-3.5" />
+              Sales Return
             </span>
             <h1 className="font-heading text-lg font-bold text-stone-800 tracking-tight leading-tight mt-0.5">
-              Create Packing List
+              Create Sales Return
             </h1>
             <p className="text-xs text-stone-500 font-medium">
-              Record new delivery outward sales packing and link verified product barcodes.
+              Record customer sales return and link verified product barcodes.
             </p>
           </div>
 
@@ -695,14 +655,14 @@ const CreateSales = () => {
             asChild
             className="h-9 border-stone-200 text-stone-700 hover:bg-[#F5F2EB] rounded-xl text-xs shadow-2xs font-semibold"
           >
-            <Link to="/sales" className="flex items-center gap-1.5">
+            <Link to="/sales-return" className="flex items-center gap-1.5">
               <ChevronLeft className="h-4 w-4" />
               Back
             </Link>
           </Button>
         </div>
 
-        {/* Sales & Dispatch Information Form */}
+        {/* Return & Retailer Information Form */}
         <div className="bg-white border border-stone-200/80 rounded-2xl p-5 sm:p-6 shadow-2xs">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Retailer */}
@@ -739,11 +699,12 @@ const CreateSales = () => {
                 placeholder="Search and select retailer..."
               />
             </div>
-            {/* Packing Date */}
+
+            {/* Return Date */}
             <div className="space-y-1.5">
               <Label htmlFor="salesDate" className="text-xs font-semibold text-stone-700 flex items-center gap-1">
                 <Calendar className="h-3.5 w-3.5 text-stone-400" />
-                Packing Date <span className="text-red-500">*</span>
+                Return Date <span className="text-red-500">*</span>
               </Label>
               <Input
                 type="date"
@@ -837,15 +798,15 @@ const CreateSales = () => {
               )}
             </div>
 
-            {/* Packing Slip No */}
+            {/* Return Slip No */}
             <div className="space-y-1.5">
               <Label htmlFor="packingSlipNo" className="text-xs font-semibold text-stone-700 flex items-center gap-1">
                 <Hash className="h-3.5 w-3.5 text-stone-400" />
-                Packing Slip No <span className="text-red-500">*</span>
+                Return Slip No <span className="text-red-500">*</span>
               </Label>
               <Input
                 id="packingSlipNo"
-                placeholder="Enter Packing Slip No"
+                placeholder="Enter Return Slip No"
                 name="work_order_sa_dc_no"
                 value={workorder.work_order_sa_dc_no}
                 onChange={onInputChange}
@@ -853,46 +814,14 @@ const CreateSales = () => {
               />
             </div>
 
-            {/* DC Date - Commented */}
-            {/* <div className="space-y-1.5">
-              <Label htmlFor="dcDate" className="text-xs font-semibold text-stone-700 flex items-center gap-1">
-                <Calendar className="h-3.5 w-3.5 text-stone-400" />
-                DC Date <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                type="date"
-                id="dcDate"
-                name="work_order_sa_dc_date"
-                value={workorder.work_order_sa_dc_date}
-                onChange={onInputChange}
-                className="h-10 text-xs bg-white border-stone-200 focus:border-[#A27B5C] focus:ring-[#A27B5C]/20 rounded-xl text-stone-800 shadow-2xs font-medium"
-              />
-            </div> */}
-
-            {/* Fabric Sales - Commented */}
-            {/* <div className="space-y-1.5">
-              <Label htmlFor="fabricSale" className="text-xs font-semibold text-stone-700 flex items-center gap-1">
-                <Layers className="h-3.5 w-3.5 text-stone-400" />
-                Fabric Sales <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="fabricSale"
-                placeholder="Fabric sales reference / type"
-                name="work_order_sa_fabric_sale"
-                value={workorder.work_order_sa_fabric_sale}
-                onChange={onInputChange}
-                className="h-10 text-xs bg-white border-stone-200 focus:border-[#A27B5C] focus:ring-[#A27B5C]/20 rounded-xl text-stone-800 shadow-2xs font-medium"
-              />
-            </div> */}
-
             {/* Remarks */}
             <div className="space-y-1.5 col-span-full">
               <Label htmlFor="remarks" className="text-xs font-semibold text-stone-700">
-                Remarks / Dispatch Notes
+                Remarks / Return Notes
               </Label>
               <Input
                 id="remarks"
-                placeholder="Optional notes or dispatch remarks..."
+                placeholder="Optional notes or return remarks..."
                 name="work_order_sa_remarks"
                 value={workorder.work_order_sa_remarks}
                 onChange={onInputChange}
@@ -916,12 +845,12 @@ const CreateSales = () => {
                   Product Barcode
                 </h2>
                 <p className="text-[11px] text-stone-500">
-                  Scan or enter the unique product barcode for each garment piece.
+                  Scan or enter the unique product barcode for each garment piece returned.
                 </p>
               </div>
             </div>
 
-            {/* Status Counter Badge & Clear All */}
+            {/* Status Counter Badge */}
             <div className="flex items-center gap-2">
               <div
                 className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border transition-colors ${
@@ -941,20 +870,6 @@ const CreateSales = () => {
                   Scanned: {barcodes.length} / {maxPcs || 0} Pcs
                 </span>
               </div>
-
-              {barcodes.length > 0 && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setClearDialogOpen(true)}
-                  className="h-7 px-2.5 text-[11px] font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200 rounded-lg flex items-center gap-1 cursor-pointer transition-all shadow-2xs"
-                  title="Clear all scanned barcodes"
-                >
-                  <Trash2 className="h-3 w-3" />
-                  Clear All
-                </Button>
-              )}
             </div>
           </div>
 
@@ -993,7 +908,7 @@ const CreateSales = () => {
               type="button"
               onClick={addBarcode}
               disabled={isInputDisabled || !currentInputValue.trim() || loading}
-              className="h-10 px-5 bg-[#543D2B] hover:bg-[#412E20] text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 shrink-0 disabled:opacity-50 cursor-pointer"
+              className="h-10 px-5 bg-[#543D2B] hover:bg-[#412E20] text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 shrink-0 disabled:opacity-50"
             >
               {loading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -1001,16 +916,6 @@ const CreateSales = () => {
                 <Plus className="h-4 w-4" />
               )}
               Add
-            </Button>
-
-            <Button
-              type="button"
-              onClick={() => setBoxScannerOpen(true)}
-              className="h-10 px-4 bg-[#A27B5C] hover:bg-[#8D6B4F] text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
-              title="Scan and add complete box items"
-            >
-              <Scan className="h-4 w-4" />
-              Scan Box
             </Button>
           </div>
 
@@ -1086,7 +991,7 @@ const CreateSales = () => {
                   No product barcodes added yet
                 </p>
                 <p className="text-[11px] text-stone-400 max-w-xs mt-0.5">
-                  Type or scan barcode numbers in the box above to link them to this delivery order.
+                  Type or scan barcode numbers in the box above to link them to this sales return.
                 </p>
               </div>
             )}
@@ -1100,7 +1005,7 @@ const CreateSales = () => {
             asChild
             className="h-10 px-5 border-stone-200 text-stone-700 hover:bg-[#F5F2EB] rounded-xl text-xs font-semibold shadow-2xs"
           >
-            <Link to="/sales">Cancel</Link>
+            <Link to="/sales-return">Cancel</Link>
           </Button>
 
           <Button
@@ -1123,36 +1028,9 @@ const CreateSales = () => {
           </Button>
         </div>
 
-        {/* Box Scanner Modal for Complete Box Scanning */}
-        <BoxScannerModal
-          open={boxScannerOpen}
-          onOpenChange={setBoxScannerOpen}
-          onAddBoxItems={handleAddBoxItems}
-        />
-
-        {/* Clear All Confirmation Dialog */}
-        <AlertDialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Clear All Barcodes?</AlertDialogTitle>
-              <AlertDialogDescription>
-                Are you sure you want to clear all {barcodes.length} scanned product barcodes? This action cannot be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={handleConfirmClearAll}
-                className="bg-red-600 hover:bg-red-700 text-white"
-              >
-                Clear All
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
       </div>
     </Page>
   );
 };
 
-export default CreateSales;
+export default CreateSalesReturn;

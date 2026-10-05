@@ -11,6 +11,7 @@ import {
   Archive,
   FolderKanban,
   FileBarChart,
+  RotateCcw,
 } from "lucide-react";
 
 import { NavMain } from "@/components/nav-main";
@@ -116,6 +117,12 @@ export function AppSidebar({ ...props }) {
         title: "Sales Packing",
         url: "/sales",
         icon: ShoppingBag,
+        isActive: false,
+      },
+      {
+        title: "Sales Return",
+        url: "/sales-return",
+        icon: RotateCcw,
         isActive: false,
       },
       {
