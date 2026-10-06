@@ -148,15 +148,32 @@ const FinishedStockList = () => {
       ),
     },
     {
-      accessorKey: "total_balance",
+      accessorKey: "total_sales_return",
+      id: "Sales Return",
+      header: "Sales Return",
+      cell: ({ row }) => (
+        <span className="font-semibold text-blue-700">
+          {row.getValue("Sales Return") ?? 0}
+        </span>
+      ),
+    },
+    {
       id: "Balance",
       header: "Balance",
+      accessorFn: (row) => {
+        const received = Number(row.total_received) || 0;
+        const sales = Number(row.total_sales) || 0;
+        const salesReturn = Number(row.total_sales_return) || 0;
+        return received - sales + salesReturn;
+      },
       cell: ({ row }) => {
-        const received = Number(row.original.total_received) || 0;
-        const sales = Number(row.original.total_sales) || 0;
-        const balance = received - sales;
+        const balance = row.getValue("Balance");
         return (
-          <span className={`font-semibold ${balance > 0 ? "text-stone-800" : "text-stone-400"}`}>
+          <span
+            className={`font-semibold ${
+              balance > 0 ? "text-stone-800" : "text-stone-400"
+            }`}
+          >
             {balance}
           </span>
         );
